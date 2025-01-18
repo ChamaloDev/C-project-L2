@@ -9,6 +9,16 @@
 #define FPS 60
 #define ROWS 7
 #define COLLUMNS 21
+#define TILE_W 256
+#define TILE_H 192
+
+
+
+
+/* Position of the camera */
+double cam_scale = 1.0;
+double cam_pos_x = 0.0;
+double cam_pos_y = 0.0;
 
 
 
@@ -50,6 +60,25 @@ double min(double x, double y) {return (x < y) ? x : y;}
 /* Return the maximum between x and y */
 double max(double x, double y) {return (x > y) ? x : y;}
 
+/* Compute x to the power of n */
+double pow(double x, int n) {
+    /* Base case */
+    if (n == 0) return 1;
+    if (x == 0.0) return 0;
+    /* Recursive case */
+    if (n > 0) {
+        double y = x;
+        int i = 1;
+        while (i*2 <= n) {
+            y *= y;
+            i *= 2;
+        }
+        return y * pow(x, n-i);
+    }
+    /* Negative exponents */
+    else return 1.0 / pow(x, -n);
+}
+
 /* Add 2 strings together into a new string, memory must be freed after use */
 char *concatString(const char *a, const char *b) {
     char *c = malloc((strlen(a) + strlen(b) + 1) * sizeof(char));
@@ -75,12 +104,8 @@ void delImg(SDL_Surface *img) {
 
 /* Draw an image on the window surface */
 void drawImg(SDL_Renderer *rend, SDL_Surface *img, int center_x, int center_y, int width, int height) {
-    /* Get current screen scaling (compared to original) */
-    int wind_width, wind_height;
-    SDL_GetWindowSizeInPixels(SDL_RenderGetWindow(rend), &wind_width, &wind_height);
-    double scale_x = ((double) wind_width) / WIDTH, scale_y = ((double) wind_height) / HEIGHT;
     /* Destination area */
-    SDL_Rect dest = {(center_x - img->w/2) * scale_x, (center_y - img->h/2) * scale_y, width * scale_x, height * scale_y};
+    SDL_Rect dest = {(center_x - width/2 - cam_pos_x) * cam_scale, (center_y - height/2 - cam_pos_y) * cam_scale, width * cam_scale, height * cam_scale};
     /* Convert surface to texture and draw it */
     SDL_Texture *sprite = SDL_CreateTextureFromSurface(rend, img);
     SDL_RenderCopy(rend, sprite, NULL, &dest);
@@ -117,6 +142,7 @@ int main(int argc, char* argv[]) {
     /* Load images */
     SDL_Surface *grass_tiles[] = {loadImg("others/grass_tile_a.bmp"), loadImg("others/grass_tile_b.bmp"), loadImg("others/grass_tile_c.bmp"), loadImg("others/grass_tile_d.bmp")};
     /* Main loop */
+    bool mouse_dragging = false;
     bool fullscreen = FULLSCREEN;
     Uint64 tick = SDL_GetTicks64();
     SDL_Event event;
@@ -143,11 +169,35 @@ int main(int argc, char* argv[]) {
                             break;
                     }
                     break;
-                /* Key released */
-                case SDL_KEYUP:
-                    switch (event.key.keysym.scancode) {
+                /* Mouse button pressed */
+                case SDL_MOUSEBUTTONDOWN:
+                    switch (event.button.button) {
+                        case SDL_BUTTON_RIGHT:
+                            mouse_dragging = true;
+                            break;
                         default:
                             break;
+                    }
+                    break;
+                /* Mouse button released */
+                case SDL_MOUSEBUTTONUP:
+                    switch (event.button.button) {
+                        case SDL_BUTTON_RIGHT:
+                            mouse_dragging = false;
+                            break;
+                        default:
+                            break;
+                    }
+                    break;
+                /* Mouse wheel used */
+                case SDL_MOUSEWHEEL:
+                    cam_scale = min(max(0.2, cam_scale*pow(1.05, event.wheel.y)), 2.0);
+                    break;
+                /* Mouse moved */
+                case SDL_MOUSEMOTION:
+                    if (mouse_dragging) {
+                        cam_pos_x -= event.motion.xrel / cam_scale;
+                        cam_pos_y -= event.motion.yrel / cam_scale;
                     }
                     break;
                 default:
@@ -160,7 +210,7 @@ int main(int argc, char* argv[]) {
         /* Draw elements */
         for (int y = 0; y < ROWS; y++) {
             for (int x = 0; x < COLLUMNS; x++) {
-                drawImg(rend, grass_tiles[x%2 + (y%2) * 2], (WIDTH/COLLUMNS) * (x*2 + 5) / 2, (HEIGHT/ROWS) * (y*2 + 1) / 2, (13*WIDTH)/(10*COLLUMNS), (2*HEIGHT)/ROWS);
+                drawImg(rend, grass_tiles[x%2 + (y%2) * 2], TILE_W * (x*2 + 1) / 2, (TILE_H) * (y*2 + 1) / 2, TILE_W * 21/16, TILE_H * 2);
             }
         }
         /* Draw to window and loop */
