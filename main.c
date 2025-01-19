@@ -3,14 +3,16 @@
 #include <string.h>
 #include <stdbool.h>
 #include "src/SDL2/include/SDL2/SDL.h"
-#define WIDTH 1280
-#define HEIGHT 720
-#define FULLSCREEN false
-#define FPS 60
-#define ROWS 7
-#define COLLUMNS 21
-#define TILE_W 256
-#define TILE_H 192
+#define WIDTH 1280        // Default width of the window in px
+#define HEIGHT 720        // Default height of the window in px
+#define FULLSCREEN false  // Set if the game should start on fullscreen (F11 to toggle on/off)
+#define FPS 60            // Game target FPS
+#define ROWS 7            // Number of rows for the map
+#define COLLUMNS 21       // Number of collumns for the map
+#define TILE_W 256        // Width of a tile in px
+#define TILE_H 192        // Heigh of a tile in px
+#define SPRITE_W 320      // Width of all sprites in px
+#define SPRITE_H 256      // Height of all sprites in px
 
 
 
@@ -43,6 +45,11 @@ typedef struct enemy {
     struct enemy* next_line;  // First enemy in next row (bellow)
     struct enemy* prev_line;  // First enemy in previous row (above)
 } Enemy;
+
+typedef struct {
+    Enemy *enemies;     // Enemies
+    int income;         // Availible funds to build defences
+} Wave;
 
 typedef struct {
     Defence *defences;  // Defences
@@ -90,10 +97,42 @@ char *concatString(const char *a, const char *b) {
 
 
 
+// [NOT IMPLEMENTED]
+/* Read single file line */
+bool readLine(FILE *file, char ***line, int *nb_values) {
+    char line_buffer[32], value_buffer[8];
+    if (!(fgets(line_buffer, 32, file))) return false;
+    // TODO!
+}
+
+// [NOT IMPLEMENTED]
+/* Load a level */
+/* File must be located in "./src/lvl/<path>.txt" */
+bool loadLevel(const char *path, Wave ***waves, int *nb_waves) {
+    /* Openning text file */
+    char *partial_path = concatString("./src/lvl/", path);
+    char *full_path = concatString(partial_path, ".txt");
+    FILE *file = fopen(full_path, "r");
+    /* Checking if file was open successfully */
+    if (!(file)) printf("[ERROR]    Level file at \"%s\" not found\n", full_path);
+    free(partial_path);
+    free(full_path);
+    if (!(file)) return false;
+
+    // TODO!
+    return true;
+}
+
+
+
+
 /* Load an image in bitmap (.bmp) format */
+/* File must be located in "./src/img/<path>.bmp" */
 SDL_Surface *loadImg(const char *path) {
-    char *full_path = concatString("./src/img/", path);
+    char *partial_path = concatString("./src/img/", path);
+    char *full_path = concatString(partial_path, ".bmp");
     SDL_Surface *img = SDL_LoadBMP(full_path);
+    free(partial_path);
     free(full_path);
     return img;
 }
@@ -140,7 +179,7 @@ int main(int argc, char* argv[]) {
     }
 
     /* Load images */
-    SDL_Surface *grass_tiles[] = {loadImg("others/grass_tile_a.bmp"), loadImg("others/grass_tile_b.bmp"), loadImg("others/grass_tile_c.bmp"), loadImg("others/grass_tile_d.bmp")};
+    SDL_Surface *grass_tiles[] = {loadImg("others/grass_tile_a"), loadImg("others/grass_tile_b"), loadImg("others/grass_tile_c"), loadImg("others/grass_tile_d")};
     /* Main loop */
     bool mouse_dragging = false;
     bool fullscreen = FULLSCREEN;
@@ -210,7 +249,7 @@ int main(int argc, char* argv[]) {
         /* Draw elements */
         for (int y = 0; y < ROWS; y++) {
             for (int x = 0; x < COLLUMNS; x++) {
-                drawImg(rend, grass_tiles[x%2 + (y%2) * 2], TILE_W * (x*2 + 1) / 2, (TILE_H) * (y*2 + 1) / 2, TILE_W * 21/16, TILE_H * 2);
+                drawImg(rend, grass_tiles[x%2 + (y%2) * 2], TILE_W * (x*2 + 1)/2, TILE_H * (y*2 + 1)/2, SPRITE_W, SPRITE_H);
             }
         }
         /* Draw to window and loop */

@@ -41,6 +41,3 @@ dkms.conf
 
 # Visual Studio Code
 *.vscode
-
-# Text file
-*.txt
