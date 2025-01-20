@@ -109,7 +109,7 @@ bool isWhitespace(char c) {
 }
 
 /* Read a singular value on a line, move line pointer after the value read */
-bool *readValue(char **line, char **value) {
+bool readValue(char **line, char **value) {
     if (!(line) || !(*line)) return false;
     /* Get to the first value of the line, ignore all whitespaces before it */
     while (**line && isWhitespace(**line)) (*line)++;
@@ -130,8 +130,11 @@ bool *readValue(char **line, char **value) {
 /* Read single file line */
 bool readLine(FILE *file, char ***values, int *nb_values) {
     /* Get the full line */
-    char line_buffer[256];
-    if (!(fgets(line_buffer, 256, file))) return false;
+    char *line_buffer = malloc(256 * sizeof(char));
+    if (!(fgets(line_buffer, 256, file))) {
+        free(line_buffer);
+        return false;
+    }
     /* Split it into all of its individual values */
     *values = malloc(0); *nb_values = 0; char *value;
     while (readValue(&line_buffer, &value)) {
@@ -139,6 +142,7 @@ bool readLine(FILE *file, char ***values, int *nb_values) {
         realloc(*values, (*nb_values) * sizeof(char *));
         *values[*nb_values - 1] = value;
     }
+    free(line_buffer);
     /* If no value where read, it means the process failed */
     return !!(*nb_values);
 }
@@ -159,7 +163,6 @@ bool loadLevel(const char *path, Wave ***waves, int *nb_waves) {
 
     /* Retrieve all informations from the file */
     *waves = malloc(0); *nb_waves = 0; char **values; int nb_values;
-    int a, b; char c;
     while (readLine(file, &values, &nb_values)) {
         switch (nb_values) {
             /* New wave (int income) */
