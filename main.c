@@ -34,15 +34,14 @@ typedef struct defence {
 } Defence;
 
 typedef struct enemy {
-    int type;                 // Enemy type, determine it's abilities and look
-    int live_points;          // Live points of the enemy, when it reaches 0 or bellow the enemy is defeated
-    int row;                  // Row number of the enemy, 0 being the topmost row
-    int collumn;              // Collumn number of the enemy, 0 being the leftmost collumn
-    int speed;                // Number of collumn travelled per turn
-    int spawn_delay;          // Number of turn before spawning in
-    struct enemy* next;       // Next enemy on the row
-    struct enemy* next_line;  // First enemy in next row (bellow)
-    struct enemy* prev_line;  // First enemy in previous row (above)
+    int type;                   // Enemy type, determine it's abilities and look
+    int live_points;            // Live points of the enemy, when it reaches 0 or bellow the enemy is defeated
+    int row;                    // Row number of the enemy, 0 being the topmost row
+    int collumn;                // Collumn number of the enemy, 0 being the leftmost collumn
+    int speed;                  // Number of collumn travelled per turn
+    struct enemy* next;         // Next enemy (in order of apparition)
+    struct enemy* next_on_row;  // Next enemy on the same row (behind this)
+    struct enemy* prev_on_row;  // Previous enemy on the same row (in front of this)
 } Enemy;
 
 typedef struct {
@@ -103,6 +102,64 @@ int stringToInt(const char *str) {
 
 
 
+/* Add an enemy to the list of enemies, fail if cannot spawn enemy at specified location or if enemy type is not defined */
+bool addEnemy(Enemy **enemy_list, char enemy_type, int spawn_row, int spawn_collumn) {
+    Enemy *new_enemy = malloc(sizeof(Enemy));
+    new_enemy->type = enemy_type;
+    new_enemy->collumn = spawn_collumn;
+    new_enemy->row = spawn_row;
+    new_enemy->next = new_enemy->next_on_row = new_enemy->prev_on_row = NULL;
+    /* Match the enemy type to its stats */
+    switch (enemy_type) {
+        /* Slime */
+        case 'S':
+            new_enemy->live_points = 4;
+            new_enemy->speed = 2;
+            break;
+        /* Unknown enemy type */
+        default:
+            printf("[ERROR]    Unknown enemy type '%c'\n", enemy_type);
+            free(new_enemy);
+            return false;
+    }
+
+    /* Add the new enemy to the enemy list */
+    /* If empty then no search is needed */
+    if (!(*enemy_list)) {
+        *enemy_list = new_enemy;
+        return true;
+    }
+    Enemy *current = *enemy_list;
+    /* Look for the previous and next enemy on the same row as this new enemy */
+    while (true) {
+        if (current->row = new_enemy->row) {
+            /* Enemy located on the same row and in front of this new enemy */
+            if (current->collumn < new_enemy->collumn) {
+                if (!(new_enemy->prev_on_row) || new_enemy->prev_on_row->collumn > new_enemy->collumn) new_enemy->prev_on_row = current;
+            }
+            /* Enemy located on the same row and behind this new enemy */
+            else if (current->collumn > new_enemy->collumn) {
+                if (!(new_enemy->next_on_row) || new_enemy->next_on_row->collumn < new_enemy->collumn) new_enemy->next_on_row = current;
+            }
+            /* Enemy located on the same exact spot as this new enemy, cannot spawn properly */
+            else {
+                free(new_enemy);
+                return false;
+            }
+        }
+        if (!(current->next)) break;
+        current = current->next;
+    }
+    /* Add the new enemy to the enemy list */
+    current->next = new_enemy;
+    if (new_enemy->prev_on_row) new_enemy->next_on_row = new_enemy;
+    if (new_enemy->next_on_row) new_enemy->prev_on_row = new_enemy;
+    return true;
+}
+
+
+
+
 /* Return if the caracter is considered to be a whitespace */
 bool isWhitespace(char c) {
     return (!(c)) || (c == ' ') || (c == '\n') || (c == '\r') || (c == '\t');
@@ -155,16 +212,21 @@ bool loadLevel(const char *path, Wave ***waves, int *nb_waves) {
     char *partial_path = concatString("./src/lvl/", path);
     char *full_path = concatString(partial_path, ".txt");
     FILE *file = fopen(full_path, "r");
-    /* Checking if file was open successfully */
-    if (!(file)) printf("[ERROR]    Level file at \"%s\" not found\n", full_path);
     free(partial_path);
-    free(full_path);
-    if (!(file)) return false;
+    /* Checking if file was open successfully */
+    if (!(file)) {
+        printf("[ERROR]    Level file at \"%s\" not found\n", full_path);
+        free(full_path);
+        return false;
+    }
 
     /* Retrieve all informations from the file */
     *waves = malloc(0); *nb_waves = 0; char **values; int nb_values;
     while (readLine(file, &values, &nb_values)) {
         switch (nb_values) {
+            /* Empty line, ignore it */
+            case 0:
+                break;
             /* New wave (int income) */
             case 1:
                 (*nb_waves)++;
@@ -175,13 +237,21 @@ bool loadLevel(const char *path, Wave ***waves, int *nb_waves) {
                 break;
             /* Add enemy (int spawn_delay, int row, char type) */
             case 3:
-                // TODO!
+                if (!(nb_waves)) {
+                    printf("[ERROR]    Invalid syntax for level file \"%s\"\n", full_path);
+                    free(full_path);
+                    return false;
+                }
+                addEnemy(&((*waves)[*nb_waves - 1]->enemies), *(values[2]), stringToInt(values[1]), COLLUMNS + stringToInt(values[0]) - 1);
                 break;
+            /* Invalid value count on line */
             default:
-                break;
+                printf("[ERROR]    Invalid syntax for level file \"%s\"\n", full_path);
+                free(full_path);
+                return false;
         }
     }
-    // TODO!
+    free(full_path);
     return true;
 }
 
@@ -253,6 +323,10 @@ int main(int argc, char* argv[]) {
         SDL_Quit();
         return 0;
     }
+    printf("Z = %lld\n", typeToID("Z"));
+    printf("Y = %lld\n", typeToID("Y"));
+    printf("Slime = %lld\n", typeToID("Slime"));
+    printf("Gelly = %lld\n", typeToID("Gelly"));
 
     /* Load images */
     SDL_Surface *grass_tiles[] = {loadImg("others/grass_tile_a"), loadImg("others/grass_tile_b"), loadImg("others/grass_tile_c"), loadImg("others/grass_tile_d")};
@@ -316,7 +390,7 @@ int main(int argc, char* argv[]) {
                     }
                     // printf("%d / %d\n",event.motion.x,event.motion.y); mouse position debug 
                     break;
-                  
+                    
                 default:
                     break;
             }
