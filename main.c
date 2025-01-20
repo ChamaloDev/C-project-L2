@@ -93,15 +93,54 @@ char *concatString(const char *a, const char *b) {
     return c;
 }
 
+/* Convert a string to an int */
+int stringToInt(const char *str) {
+    int n;
+    sscanf(str, " %d", &n);
+    return n;
+}
 
 
 
-// [NOT IMPLEMENTED]
+
+/* Return if the caracter is considered to be a whitespace */
+bool isWhitespace(char c) {
+    return (!(c)) || (c == ' ') || (c == '\n') || (c == '\r') || (c == '\t');
+}
+
+/* Read a singular value on a line, move line pointer after the value read */
+bool *readValue(char **line, char **value) {
+    if (!(line) || !(*line)) return false;
+    /* Get to the first value of the line, ignore all whitespaces before it */
+    while (**line && isWhitespace(**line)) (*line)++;
+    char *start = *line;
+    /* Find the end of the word */
+    while (!(isWhitespace(**line))) (*line)++;
+    /* If the value read is an empty string, it means that the line does not contain any value */
+    if (start == *line) return NULL;
+    /* Copy the value read into the value variable */
+    *value = malloc((*line - start + 1) * sizeof(char));
+    char c = **line;
+    **line = '\0';
+    strcpy(*value, *line);
+    **line = c;
+    return true;
+}
+
 /* Read single file line */
-bool readLine(FILE *file, char ***line, int *nb_values) {
-    char line_buffer[32], value_buffer[8];
-    if (!(fgets(line_buffer, 32, file))) return false;
-    // TODO!
+bool readLine(FILE *file, char ***values, int *nb_values) {
+    /* Get the full line */
+    char line_buffer[256];
+    if (!(fgets(line_buffer, 256, file))) return false;
+    /* Split it into all of its individual values */
+    *values = malloc(0); *nb_values = 0; char *value;
+    while (readValue(&line_buffer, &value)) {
+        (*nb_values)++;
+        realloc(*values, (*nb_values) * sizeof(char *));
+        *values[*nb_values - 1] = value;
+    }
+    /* If no value where read, it means the process failed */
+    return !!(*nb_values);
 }
 
 // [NOT IMPLEMENTED]
@@ -118,6 +157,27 @@ bool loadLevel(const char *path, Wave ***waves, int *nb_waves) {
     free(full_path);
     if (!(file)) return false;
 
+    /* Retrieve all informations from the file */
+    *waves = malloc(0); *nb_waves = 0; char **values; int nb_values;
+    int a, b; char c;
+    while (readLine(file, &values, &nb_values)) {
+        switch (nb_values) {
+            /* New wave (int income) */
+            case 1:
+                (*nb_waves)++;
+                realloc(*waves, (*nb_waves) * sizeof(Wave *));
+                *waves[*nb_waves - 1] = malloc(sizeof(Wave));
+                (*waves[*nb_waves - 1])->income = stringToInt(values[0]);
+                (*waves[*nb_waves - 1])->enemies = NULL;
+                break;
+            /* Add enemy (int spawn_delay, int row, char type) */
+            case 3:
+                // TODO!
+                break;
+            default:
+                break;
+        }
+    }
     // TODO!
     return true;
 }
