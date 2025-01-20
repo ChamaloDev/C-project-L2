@@ -323,10 +323,6 @@ int main(int argc, char* argv[]) {
         SDL_Quit();
         return 0;
     }
-    printf("Z = %lld\n", typeToID("Z"));
-    printf("Y = %lld\n", typeToID("Y"));
-    printf("Slime = %lld\n", typeToID("Slime"));
-    printf("Gelly = %lld\n", typeToID("Gelly"));
 
     /* Load images */
     SDL_Surface *grass_tiles[] = {loadImg("others/grass_tile_a"), loadImg("others/grass_tile_b"), loadImg("others/grass_tile_c"), loadImg("others/grass_tile_d")};
