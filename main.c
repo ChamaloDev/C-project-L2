@@ -10,15 +10,14 @@
 #define ROWS 7            // Number of rows for the map
 #define COLLUMNS 21       // Number of collumns for the map
 #define TILE_W 256        // Width of a tile in px
-#define TILE_H 192        // Heigh of a tile in px
-#define SPRITE_W 320      // Width of all sprites in px
-#define SPRITE_H 256      // Height of all sprites in px
+#define TILE_H 192        // Height of a tile in px
+#define SPRITE_SIZE 320   // Height and width of all sprites in px
 
 
 
 
 /* Position of the camera */
-double cam_scale = 1.0;
+double cam_scale = 0.5;
 double cam_pos_x = 0.0;
 double cam_pos_y = 0.0;
 
@@ -249,7 +248,7 @@ int main(int argc, char* argv[]) {
         /* Draw elements */
         for (int y = 0; y < ROWS; y++) {
             for (int x = 0; x < COLLUMNS; x++) {
-                drawImg(rend, grass_tiles[x%2 + (y%2) * 2], TILE_W * (x*2 + 1)/2, TILE_H * (y*2 + 1)/2, SPRITE_W, SPRITE_H);
+                drawImg(rend, grass_tiles[x%2 + (y%2) * 2], TILE_W * (x*2 + 1)/2, TILE_H * (y*2 + 1)/2, SPRITE_SIZE, SPRITE_SIZE);
             }
         }
         /* Draw to window and loop */
