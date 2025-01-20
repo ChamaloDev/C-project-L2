@@ -3,15 +3,15 @@
 #include <string.h>
 #include <stdbool.h>
 #include "src/SDL2/include/SDL2/SDL.h"
-#define WIDTH 1280        // Default width of the window in px
-#define HEIGHT 720        // Default height of the window in px
-#define FULLSCREEN false  // Set if the game should start on fullscreen (F11 to toggle on/off)
-#define FPS 60            // Game target FPS
-#define ROWS 7          // Number of rows for the map
-#define COLLUMNS 21       // Number of collumns for the map
-#define TILE_W 256        // Width of a tile in px
-#define TILE_H 192        // Height of a tile in px
-#define SPRITE_SIZE 320   // Height and width of all sprites in px
+#define WINDOW_WIDTH 1280  // Default width of the window in px
+#define WINDOW_HEIGHT 720  // Default height of the window in px
+#define FULLSCREEN false   // Set if the game should start on fullscreen (F11 to toggle on/off)
+#define FPS 60             // Game target FPS
+#define NB_ROWS 7          // Number of rows for the map
+#define NB_COLLUMNS 21     // Number of collumns for the map
+#define TILE_WIDTH 256     // Width of a tile in px
+#define TILE_HEIGHT 192    // Height of a tile in px
+#define SPRITE_SIZE 320    // Height and width of all sprites in px
 
 
 
@@ -31,6 +31,7 @@ typedef struct defence {
     int collumn;           // Collumn number of the defence, 0 being the leftmost collumn
     int cost;              // Placement cost of the defence
     struct defence* next;  // Pointer to the next defence placed
+    SDL_Surface *sprite;   // Sprite of the defence
 } Defence;
 
 typedef struct enemy {
@@ -42,6 +43,7 @@ typedef struct enemy {
     struct enemy* next;         // Next enemy (in order of apparition)
     struct enemy* next_on_row;  // Next enemy on the same row (behind this)
     struct enemy* prev_on_row;  // Previous enemy on the same row (in front of this)
+    SDL_Surface *sprite;        // Sprite of the enemy
 } Enemy;
 
 typedef struct {
@@ -55,6 +57,27 @@ typedef struct {
     int funds;          // Availible funds to build defences
     int turn_nb;        // Turn number
 } Game;
+
+
+
+
+/* Header */
+double min(double x, double y);
+double max(double x, double y);
+double pow(double x, int n);
+char *concatString(const char *a, const char *b);
+int stringToInt(const char *str);
+bool addEnemy(Enemy **enemy_list, char enemy_type, int spawn_row, int spawn_collumn);
+bool isWhitespace(char c);
+bool readValue(char **line, char **value);
+bool readLine(FILE *file, char ***values, int *nb_values);
+bool loadLevel(const char *path, Wave ***waves, int *nb_waves);
+SDL_Surface *loadImg(const char *path);
+void delImg(SDL_Surface *img);
+void drawImgStatic(SDL_Renderer *rend, SDL_Surface *img, int pos_x, int pos_y, int width, int height);
+void drawImgDynamic(SDL_Renderer *rend, SDL_Surface *img, int pos_x, int pos_y, int width, int height);
+void drawRect(SDL_Renderer *rend, int pos_x, int pos_y, int width, int height, int red, int green, int blue, int alpha);
+void drawEnemies(SDL_Renderer *rend, Enemy *enemy_list);
 
 
 
@@ -104,6 +127,10 @@ int stringToInt(const char *str) {
 
 /* Add an enemy to the list of enemies, fail if cannot spawn enemy at specified location or if enemy type is not defined */
 bool addEnemy(Enemy **enemy_list, char enemy_type, int spawn_row, int spawn_collumn) {
+    /* Can't summon enemies in not existing rows */
+    if (1 > spawn_row || spawn_row > NB_ROWS) return false;
+
+    /* Initialize the new enemy */
     Enemy *new_enemy = malloc(sizeof(Enemy));
     new_enemy->type = enemy_type;
     new_enemy->collumn = spawn_collumn;
@@ -114,7 +141,14 @@ bool addEnemy(Enemy **enemy_list, char enemy_type, int spawn_row, int spawn_coll
         /* Slime */
         case 'S':
             new_enemy->live_points = 4;
+            new_enemy->speed = 3;
+            new_enemy->sprite = loadImg("enemies/Slime");
+            break;
+        /* Gelly (big slime) */
+        case 'G':
+            new_enemy->live_points = 7;
             new_enemy->speed = 2;
+            new_enemy->sprite = loadImg("enemies/Gelly");
             break;
         /* Unknown enemy type */
         default:
@@ -132,7 +166,7 @@ bool addEnemy(Enemy **enemy_list, char enemy_type, int spawn_row, int spawn_coll
     Enemy *current = *enemy_list;
     /* Look for the previous and next enemy on the same row as this new enemy */
     while (true) {
-        if (current->row = new_enemy->row) {
+        if (current->row == new_enemy->row) {
             /* Enemy located on the same row and in front of this new enemy */
             if (current->collumn < new_enemy->collumn) {
                 if (!(new_enemy->prev_on_row) || new_enemy->prev_on_row->collumn > new_enemy->collumn) new_enemy->prev_on_row = current;
@@ -157,6 +191,14 @@ bool addEnemy(Enemy **enemy_list, char enemy_type, int spawn_row, int spawn_coll
     return true;
 }
 
+/* Draw all enemies, affected by camera position */
+void drawEnemies(SDL_Renderer *rend, Enemy *enemy_list) {
+    while (enemy_list) {
+        drawImgDynamic(rend, enemy_list->sprite, TILE_WIDTH * enemy_list->collumn, TILE_HEIGHT * (enemy_list->row - 1), SPRITE_SIZE, SPRITE_SIZE);
+        enemy_list = enemy_list->next;
+    }
+}
+
 
 
 
@@ -179,7 +221,7 @@ bool readValue(char **line, char **value) {
     *value = malloc((*line - start + 1) * sizeof(char));
     char c = **line;
     **line = '\0';
-    strcpy(*value, *line);
+    strcpy(*value, start);
     **line = c;
     return true;
 }
@@ -193,18 +235,18 @@ bool readLine(FILE *file, char ***values, int *nb_values) {
         return false;
     }
     /* Split it into all of its individual values */
-    *values = malloc(0); *nb_values = 0; char *value;
-    while (readValue(&line_buffer, &value)) {
+    *values = malloc(0); *nb_values = 0; char *value, *line = line_buffer;
+    while (readValue(&line, &value)) {
         (*nb_values)++;
-        realloc(*values, (*nb_values) * sizeof(char *));
-        *values[*nb_values - 1] = value;
+        *values = realloc(*values, (*nb_values) * sizeof(char *));
+        (*values)[*nb_values - 1] = value;
     }
     free(line_buffer);
-    /* If no value where read, it means the process failed */
-    return !!(*nb_values);
+    for (int i = 0; i < *nb_values; i++) printf("%s ", (*values)[i]);
+    printf("\n");
+    return true;
 }
 
-// [NOT IMPLEMENTED]
 /* Load a level */
 /* File must be located in "./src/lvl/<path>.txt" */
 bool loadLevel(const char *path, Wave ***waves, int *nb_waves) {
@@ -230,26 +272,30 @@ bool loadLevel(const char *path, Wave ***waves, int *nb_waves) {
             /* New wave (int income) */
             case 1:
                 (*nb_waves)++;
-                realloc(*waves, (*nb_waves) * sizeof(Wave *));
+                *waves = realloc(*waves, (*nb_waves) * sizeof(Wave *));
                 *waves[*nb_waves - 1] = malloc(sizeof(Wave));
                 (*waves[*nb_waves - 1])->income = stringToInt(values[0]);
                 (*waves[*nb_waves - 1])->enemies = NULL;
                 break;
             /* Add enemy (int spawn_delay, int row, char type) */
             case 3:
-                if (!(nb_waves)) {
+                if (!(*nb_waves)) {
                     printf("[ERROR]    Invalid syntax for level file \"%s\"\n", full_path);
                     free(full_path);
                     return false;
                 }
-                addEnemy(&((*waves)[*nb_waves - 1]->enemies), *(values[2]), stringToInt(values[1]), COLLUMNS + stringToInt(values[0]) - 1);
+                addEnemy(&((*waves)[*nb_waves - 1]->enemies), *(values[2]), stringToInt(values[1]), NB_COLLUMNS + stringToInt(values[0]) - 1);
                 break;
             /* Invalid value count on line */
             default:
                 printf("[ERROR]    Invalid syntax for level file \"%s\"\n", full_path);
                 free(full_path);
+                for (int i = 0; i < nb_values; i++) free(values[i]);
+                free(values);
                 return false;
         }
+        for (int i = 0; i < nb_values; i++) free(values[i]);
+        free(values);
     }
     free(full_path);
     return true;
@@ -274,9 +320,13 @@ void delImg(SDL_Surface *img) {
 }
 
 /* Draw an image on the window surface */
-void drawImgStatic(SDL_Renderer *rend, SDL_Surface *img, int center_x, int center_y, int width, int height) {
+void drawImgStatic(SDL_Renderer *rend, SDL_Surface *img, int pos_x, int pos_y, int width, int height) {
+    /* Getting window size */
+    int wind_width, wind_height;
+    SDL_Window *wind = SDL_RenderGetWindow(rend);
+    SDL_GetWindowSizeInPixels(wind, &wind_width, &wind_height);
     /* Destination area */
-    SDL_Rect dest = {center_x - width/2, center_y - height/2, width, height};
+    SDL_Rect dest = {pos_x + wind_width/2, pos_y + wind_height/2, width, height};
     /* Convert surface to texture and draw it */
     SDL_Texture *sprite = SDL_CreateTextureFromSurface(rend, img);
     SDL_RenderCopy(rend, sprite, NULL, &dest);
@@ -284,20 +334,18 @@ void drawImgStatic(SDL_Renderer *rend, SDL_Surface *img, int center_x, int cente
 }
 
 /* Draw an image on the window surface, affected by camera position */
-void drawImgDynamic(SDL_Renderer *rend, SDL_Surface *img, int center_x, int center_y, int width, int height) {
-    /* Destination area */
-    SDL_Rect dest = {(center_x - width/2 - cam_pos_x) * cam_scale, (center_y - height/2 - cam_pos_y) * cam_scale, width * cam_scale, height * cam_scale};
-    /* Convert surface to texture and draw it */
-    SDL_Texture *sprite = SDL_CreateTextureFromSurface(rend, img);
-    SDL_RenderCopy(rend, sprite, NULL, &dest);
-    SDL_DestroyTexture(sprite);
+void drawImgDynamic(SDL_Renderer *rend, SDL_Surface *img, int pos_x, int pos_y, int width, int height) {
+    drawImgStatic(rend, img, (pos_x - cam_pos_x) * cam_scale, (pos_y - cam_pos_y) * cam_scale, width * cam_scale, height * cam_scale);
 }
 
+/* Draw a rectangle */
 void drawRect(SDL_Renderer *rend, int pos_x, int pos_y, int width, int height, int red, int green, int blue, int alpha) {
     SDL_SetRenderDrawColor(rend, red, green, blue, alpha);
     SDL_Rect rect = {pos_x, pos_y, width, height};
     SDL_RenderDrawRect(rend, &rect);
 }
+
+
 
 
 int main(int argc, char* argv[]) {
@@ -307,7 +355,7 @@ int main(int argc, char* argv[]) {
         return 0;
     }
     /* Create a window */
-    SDL_Window* wind = SDL_CreateWindow("Game of the year", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, WIDTH, HEIGHT, SDL_WINDOW_RESIZABLE);
+    SDL_Window* wind = SDL_CreateWindow("Game of the year", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, WINDOW_WIDTH, WINDOW_HEIGHT, 0);
     if (!wind) {
         printf("Error creating window: %s\n", SDL_GetError());
         SDL_Quit();
@@ -323,6 +371,12 @@ int main(int argc, char* argv[]) {
         SDL_Quit();
         return 0;
     }
+    /* Antialiasing */
+    SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "1");
+
+    // [DEBBUG]
+    Wave **waves; int nb_waves;
+    loadLevel("level_test", &waves, &nb_waves);
 
     /* Load images */
     SDL_Surface *grass_tiles[] = {loadImg("others/grass_tile_a"), loadImg("others/grass_tile_b"), loadImg("others/grass_tile_c"), loadImg("others/grass_tile_d")};
@@ -386,7 +440,6 @@ int main(int argc, char* argv[]) {
                     }
                     // printf("%d / %d\n",event.motion.x,event.motion.y); mouse position debug 
                     break;
-                    
                 default:
                     break;
             }
@@ -395,12 +448,13 @@ int main(int argc, char* argv[]) {
         SDL_SetRenderDrawColor(rend, 0, 0, 0, 255);
         SDL_RenderClear(rend);
         /* Draw elements */
-        for (int y = 0; y < ROWS; y++) {
-            for (int x = 0; x < COLLUMNS; x++) {
-                drawImgDynamic(rend, grass_tiles[x%2 + (y%2) * 2], TILE_W * (x*2 + 1)/2, TILE_H * (y*2 + 1)/2, SPRITE_SIZE, SPRITE_SIZE);
+        for (int y = 0; y < NB_ROWS; y++) {
+            for (int x = 0; x < NB_COLLUMNS; x++) {
+                drawImgDynamic(rend, grass_tiles[x%2 + (y%2) * 2], TILE_WIDTH * x, TILE_HEIGHT * y, SPRITE_SIZE, SPRITE_SIZE);
             }
         }
-        drawRect(rend,0,0,WIDTH,HEIGHT/4,255,0,0,255);
+        drawEnemies(rend, waves[0]->enemies);
+        drawRect(rend,0,0,WINDOW_WIDTH,WINDOW_HEIGHT/4,255,0,0,255);
         /* Draw to window and loop */
         SDL_RenderPresent(rend);
         SDL_Delay(max(1000/FPS - (SDL_GetTicks64()-tick), 0));
