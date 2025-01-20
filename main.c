@@ -7,7 +7,7 @@
 #define HEIGHT 720        // Default height of the window in px
 #define FULLSCREEN false  // Set if the game should start on fullscreen (F11 to toggle on/off)
 #define FPS 60            // Game target FPS
-#define ROWS 7            // Number of rows for the map
+#define ROWS 7          // Number of rows for the map
 #define COLLUMNS 21       // Number of collumns for the map
 #define TILE_W 256        // Width of a tile in px
 #define TILE_H 192        // Height of a tile in px
@@ -201,7 +201,17 @@ void delImg(SDL_Surface *img) {
 }
 
 /* Draw an image on the window surface */
-void drawImg(SDL_Renderer *rend, SDL_Surface *img, int center_x, int center_y, int width, int height) {
+void drawImgStatic(SDL_Renderer *rend, SDL_Surface *img, int center_x, int center_y, int width, int height) {
+    /* Destination area */
+    SDL_Rect dest = {center_x - width/2, center_y - height/2, width, height};
+    /* Convert surface to texture and draw it */
+    SDL_Texture *sprite = SDL_CreateTextureFromSurface(rend, img);
+    SDL_RenderCopy(rend, sprite, NULL, &dest);
+    SDL_DestroyTexture(sprite);
+}
+
+/* Draw an image on the window surface, affected by camera position */
+void drawImgDynamic(SDL_Renderer *rend, SDL_Surface *img, int center_x, int center_y, int width, int height) {
     /* Destination area */
     SDL_Rect dest = {(center_x - width/2 - cam_pos_x) * cam_scale, (center_y - height/2 - cam_pos_y) * cam_scale, width * cam_scale, height * cam_scale};
     /* Convert surface to texture and draw it */
@@ -210,7 +220,11 @@ void drawImg(SDL_Renderer *rend, SDL_Surface *img, int center_x, int center_y, i
     SDL_DestroyTexture(sprite);
 }
 
-
+void drawRect(SDL_Renderer *rend, int pos_x, int pos_y, int width, int height, int red, int green, int blue, int alpha) {
+    SDL_SetRenderDrawColor(rend, red, green, blue, alpha);
+    SDL_Rect rect = {pos_x, pos_y, width, height};
+    SDL_RenderDrawRect(rend, &rect);
+}
 
 
 int main(int argc, char* argv[]) {
@@ -297,7 +311,9 @@ int main(int argc, char* argv[]) {
                         cam_pos_x -= event.motion.xrel / cam_scale;
                         cam_pos_y -= event.motion.yrel / cam_scale;
                     }
+                    // printf("%d / %d\n",event.motion.x,event.motion.y); mouse position debug 
                     break;
+                  
                 default:
                     break;
             }
@@ -308,13 +324,15 @@ int main(int argc, char* argv[]) {
         /* Draw elements */
         for (int y = 0; y < ROWS; y++) {
             for (int x = 0; x < COLLUMNS; x++) {
-                drawImg(rend, grass_tiles[x%2 + (y%2) * 2], TILE_W * (x*2 + 1)/2, TILE_H * (y*2 + 1)/2, SPRITE_SIZE, SPRITE_SIZE);
+                drawImgDynamic(rend, grass_tiles[x%2 + (y%2) * 2], TILE_W * (x*2 + 1)/2, TILE_H * (y*2 + 1)/2, SPRITE_SIZE, SPRITE_SIZE);
             }
         }
+        drawRect(rend,0,0,WIDTH,HEIGHT/4,255,0,0,255);
         /* Draw to window and loop */
         SDL_RenderPresent(rend);
         SDL_Delay(max(1000/FPS - (SDL_GetTicks64()-tick), 0));
         tick = SDL_GetTicks64();
+        
     }
 
     /* Free allocated memory */
