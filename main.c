@@ -3,8 +3,7 @@
 #include <string.h>
 #include <stdbool.h>
 #include "src/SDL2/include/SDL2/SDL.h"
-#define WINDOW_WIDTH 1280  // Default width of the window in px
-#define WINDOW_HEIGHT 720  // Default height of the window in px
+
 #define FULLSCREEN false   // Set if the game should start on fullscreen (F11 to toggle on/off)
 #define FPS 60             // Game target FPS
 #define NB_ROWS 7          // Number of rows for the map
@@ -202,6 +201,7 @@ void drawEnemies(SDL_Renderer *rend, Enemy *enemy_list) {
 
 
 
+
 /* Return if the caracter is considered to be a whitespace */
 bool isWhitespace(char c) {
     return (!(c)) || (c == ' ') || (c == '\n') || (c == '\r') || (c == '\t');
@@ -344,8 +344,11 @@ void drawRect(SDL_Renderer *rend, int pos_x, int pos_y, int width, int height, i
     SDL_Rect rect = {pos_x, pos_y, width, height};
     SDL_RenderDrawRect(rend, &rect);
 }
-
-
+void drawFilledRect(SDL_Renderer *rend, int pos_x, int pos_y, int width, int height, int red, int green, int blue, int alpha) {
+    SDL_SetRenderDrawColor(rend, red, green, blue, alpha);
+    SDL_Rect rect = {pos_x, pos_y, width, height};
+    SDL_RenderFillRect(rend, &rect);
+}
 
 
 int main(int argc, char* argv[]) {
@@ -354,6 +357,8 @@ int main(int argc, char* argv[]) {
         printf("Error initializing SDL: %s\n", SDL_GetError());
         return 0;
     }
+    
+    int WINDOW_WIDTH = 1280, WINDOW_HEIGHT=720; //default size for the window
     /* Create a window */
     SDL_Window* wind = SDL_CreateWindow("Game of the year", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, WINDOW_WIDTH, WINDOW_HEIGHT, 0);
     if (!wind) {
@@ -377,15 +382,23 @@ int main(int argc, char* argv[]) {
     // [DEBBUG]
     Wave **waves; int nb_waves;
     loadLevel("level_test", &waves, &nb_waves);
-
+	
+	
     /* Load images */
+    SDL_Surface *archer_1=loadImg("others/archer_menu");
+    SDL_Surface *towers[]={loadImg("towers/archer_tower_1")};
     SDL_Surface *grass_tiles[] = {loadImg("others/grass_tile_a"), loadImg("others/grass_tile_b"), loadImg("others/grass_tile_c"), loadImg("others/grass_tile_d")};
     /* Main loop */
+   	
+   	
     bool mouse_dragging = false;
     bool fullscreen = FULLSCREEN;
     Uint64 tick = SDL_GetTicks64();
     SDL_Event event;
     bool running = true;
+    bool menu_hidden=false;
+    int money=0;
+    
     while (running) {
         /* Process events */
         while (SDL_PollEvent(&event)) {
@@ -403,7 +416,11 @@ int main(int argc, char* argv[]) {
                         case SDL_SCANCODE_F11:
                             fullscreen = !fullscreen;
                             SDL_SetWindowFullscreen(wind, SDL_WINDOW_FULLSCREEN_DESKTOP*fullscreen);
+                            SDL_GetWindowSize(wind,&WINDOW_WIDTH,&WINDOW_HEIGHT); // get the new values of width and height for the screen
                             break;
+                        case SDL_SCANCODE_F:
+                        	menu_hidden=!menu_hidden; //hide or open the menu with the key f
+                        	break;
                         default:
                             break;
                     }
@@ -414,6 +431,8 @@ int main(int argc, char* argv[]) {
                         case SDL_BUTTON_RIGHT:
                             mouse_dragging = true;
                             break;
+                        case SDL_BUTTON_LEFT:
+                        	break;
                         default:
                             break;
                     }
@@ -424,9 +443,12 @@ int main(int argc, char* argv[]) {
                         case SDL_BUTTON_RIGHT:
                             mouse_dragging = false;
                             break;
+                        case SDL_BUTTON_LEFT:
+                        	mouse_dragging = false;
+                        	break;
                         default:
                             break;
-                    }
+                    	}
                     break;
                 /* Mouse wheel used */
                 case SDL_MOUSEWHEEL:
@@ -438,11 +460,12 @@ int main(int argc, char* argv[]) {
                         cam_pos_x -= event.motion.xrel / cam_scale;
                         cam_pos_y -= event.motion.yrel / cam_scale;
                     }
-                    // printf("%d / %d\n",event.motion.x,event.motion.y); mouse position debug 
+                    // printf("%d / %d\n",event.motion.x,event.motion.y); // mouse position debug 
                     break;
                 default:
                     break;
             }
+        
         }
         /* Clear screen */
         SDL_SetRenderDrawColor(rend, 0, 0, 0, 255);
@@ -453,16 +476,24 @@ int main(int argc, char* argv[]) {
                 drawImgDynamic(rend, grass_tiles[x%2 + (y%2) * 2], TILE_WIDTH * x, TILE_HEIGHT * y, SPRITE_SIZE, SPRITE_SIZE);
             }
         }
+        //Draw the Menu if necessary
+        if (menu_hidden==false){
+		    drawFilledRect(rend,0,0,WINDOW_WIDTH,WINDOW_HEIGHT/4,128,128,128,255);
+		    drawRect(rend,0,0,WINDOW_WIDTH,WINDOW_HEIGHT/4,255,255,255,255);
+		    drawImgStatic(rend,archer_1,-WINDOW_WIDTH/2,-WINDOW_HEIGHT/2,SPRITE_SIZE/2,SPRITE_SIZE/2);
+		}
         drawEnemies(rend, waves[0]->enemies);
-        drawRect(rend,0,0,WINDOW_WIDTH,WINDOW_HEIGHT/4,255,0,0,255);
+        
+        
         /* Draw to window and loop */
         SDL_RenderPresent(rend);
         SDL_Delay(max(1000/FPS - (SDL_GetTicks64()-tick), 0));
         tick = SDL_GetTicks64();
         
     }
-
+    
     /* Free allocated memory */
+    delImg(archer_1);
     delImg(grass_tiles[3]); delImg(grass_tiles[2]); delImg(grass_tiles[1]); delImg(grass_tiles[0]);
     /* Release resources */
     SDL_DestroyRenderer(rend);
