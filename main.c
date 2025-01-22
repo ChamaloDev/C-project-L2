@@ -15,6 +15,7 @@
 
 
 
+
 /* Window's dimensions */
 int WINDOW_WIDTH = 1280;
 int WINDOW_HEIGHT = 720;
@@ -27,22 +28,25 @@ double CAM_POS_Y = 0.0;
 
 
 
-typedef struct defence {
-    int type;              // Defence type, determine it's abilities, look and upgrades
-    int live_points;       // Live points of the defence, when it reaches 0 or bellow the defence is destroyed
-    int row;               // Row number of the defence, 0 being the topmost row
-    int collumn;           // Collumn number of the defence, 0 being the leftmost collumn
-    int cost;              // Placement cost of the defence
-    struct defence* next;  // Pointer to the next defence placed
-    SDL_Surface *sprite;   // Sprite of the defence
-} Defence;
+typedef struct tower {
+    int type;              // Tower type, determine it's abilities, look and upgrades
+    int live_points;       // Live points of the tower, when it reaches 0 or bellow the tower is destroyed
+    int row;               // Row number of the tower, 0 being the topmost row
+    int collumn;           // Collumn number of the tower, 0 being the leftmost collumn
+    int cost;              // Placement cost of the tower
+    struct tower* next;  // Pointer to the next tower placed
+    SDL_Surface *sprite;   // Sprite of the tower
+} Tower;
 
 typedef struct enemy {
     int type;                   // Enemy type, determine it's abilities and look
     int live_points;            // Live points of the enemy, when it reaches 0 or bellow the enemy is defeated
     int row;                    // Row number of the enemy, 0 being the topmost row
     int collumn;                // Collumn number of the enemy, 0 being the leftmost collumn
-    int speed;                  // Number of collumn travelled per turn
+    int base_speed;             // Base number of collumn travelled per turn
+    int speed;                  // Number of collumn travelled per turn, reseted to base_speed after moving
+    int base_ability_cooldown;  // Cooldown between the use of this enemy special ability
+    int ability_cooldown;       // Current cooldown of this enemy special ability, 0 meaning ready to use
     struct enemy* next;         // Next enemy (in order of apparition)
     struct enemy* next_on_row;  // Next enemy on the same row (behind this)
     struct enemy* prev_on_row;  // Previous enemy on the same row (in front of this)
@@ -55,7 +59,7 @@ typedef struct {
 } Wave;
 
 typedef struct {
-    Defence *defences;  // Defences
+    Tower *defences;  // Defences
     Enemy *enemies;     // Enemies
     int funds;          // Availible funds to build defences
     int turn_nb;        // Turn number
@@ -71,6 +75,12 @@ double pow(double x, int n);
 char *concatString(const char *a, const char *b);
 int stringToInt(const char *str);
 bool addEnemy(Enemy **enemy_list, char enemy_type, int spawn_row, int spawn_collumn);
+Enemy **getFirstEnemyOfAllRows(Enemy *enemy_list);
+Enemy **getEnemyInCollumn(Enemy *enemy_list, int collumn_nb);
+Enemy *getFirstEnemyInRow(Enemy *enemy_list, int row);
+bool moveEnemy(Enemy *enemy, int delta, char axis);
+// void updateEnemies(Enemy *enemy_list);
+void drawEnemies(SDL_Renderer *rend, Enemy *enemy_list);
 bool isWhitespace(char c);
 bool readValue(char **line, char **value);
 bool readLine(FILE *file, char ***values, int *nb_values);
@@ -80,7 +90,7 @@ void delImg(SDL_Surface *img);
 void drawImgStatic(SDL_Renderer *rend, SDL_Surface *img, int pos_x, int pos_y, int width, int height);
 void drawImgDynamic(SDL_Renderer *rend, SDL_Surface *img, int pos_x, int pos_y, int width, int height);
 void drawRect(SDL_Renderer *rend, int pos_x, int pos_y, int width, int height, int red, int green, int blue, int alpha);
-void drawEnemies(SDL_Renderer *rend, Enemy *enemy_list);
+void drawFilledRect(SDL_Renderer *rend, int pos_x, int pos_y, int width, int height, int red, int green, int blue, int alpha);
 
 
 
@@ -144,13 +154,13 @@ bool addEnemy(Enemy **enemy_list, char enemy_type, int spawn_row, int spawn_coll
         /* Slime */
         case 'S':
             new_enemy->live_points = 4;
-            new_enemy->speed = 3;
+            new_enemy->base_speed = 3;
             new_enemy->sprite = loadImg("enemies/Slime");
             break;
         /* Gelly (big slime) */
         case 'G':
             new_enemy->live_points = 7;
-            new_enemy->speed = 2;
+            new_enemy->base_speed = 2;
             new_enemy->sprite = loadImg("enemies/Gelly");
             break;
         /* Unknown enemy type */
@@ -170,13 +180,13 @@ bool addEnemy(Enemy **enemy_list, char enemy_type, int spawn_row, int spawn_coll
     /* Look for the previous and next enemy on the same row as this new enemy */
     while (true) {
         if (current->row == new_enemy->row) {
-            /* Enemy located on the same row and in front of this new enemy */
+            /* Enemy located on the same row and in front of this new enemy (to the left) */
             if (current->collumn < new_enemy->collumn) {
-                if (!new_enemy->prev_on_row || new_enemy->prev_on_row->collumn > new_enemy->collumn) new_enemy->prev_on_row = current;
+                if (!new_enemy->prev_on_row || new_enemy->prev_on_row->collumn < current->collumn) new_enemy->prev_on_row = current;
             }
-            /* Enemy located on the same row and behind this new enemy */
+            /* Enemy located on the same row and behind this new enemy (to the right) */
             else if (current->collumn > new_enemy->collumn) {
-                if (!new_enemy->next_on_row || new_enemy->next_on_row->collumn < new_enemy->collumn) new_enemy->next_on_row = current;
+                if (!new_enemy->next_on_row || new_enemy->next_on_row->collumn > current->collumn) new_enemy->next_on_row = current;
             }
             /* Enemy located on the same exact spot as this new enemy, cannot spawn properly */
             else {
@@ -189,17 +199,134 @@ bool addEnemy(Enemy **enemy_list, char enemy_type, int spawn_row, int spawn_coll
     }
     /* Add the new enemy to the enemy list */
     current->next = new_enemy;
-    if (new_enemy->prev_on_row) new_enemy->next_on_row = new_enemy;
-    if (new_enemy->next_on_row) new_enemy->prev_on_row = new_enemy;
+    if (new_enemy->prev_on_row) new_enemy->prev_on_row->next_on_row = new_enemy;
+    if (new_enemy->next_on_row) new_enemy->next_on_row->prev_on_row = new_enemy;
     return true;
+}
+
+/* Get an array containing the first enemy of each row, NULL if there is none on the row */
+Enemy **getFirstEnemyOfAllRows(Enemy *enemy_list) {
+    /* Initializing to NULL */
+    Enemy **first_of_each_row = malloc(NB_ROWS * sizeof(Enemy *));
+    for (int row_nb = 1; row_nb <= NB_ROWS; row_nb++) first_of_each_row[row_nb-1] = NULL;
+    /* Go trough all enemies */
+    Enemy *enemy = enemy_list;
+    while (enemy) {
+        if (!first_of_each_row[enemy->row-1] || first_of_each_row[enemy->row-1]->collumn > enemy->collumn) first_of_each_row[enemy->row-1] = enemy;
+        enemy = enemy->next;
+    }
+    return first_of_each_row;
+}
+
+/* Get an array containing the enemy in a collumn */
+Enemy **getEnemyInCollumn(Enemy *enemy_list, int collumn_nb) {
+    /* Initializing to NULL */
+    Enemy **enemy_collumn = malloc(NB_ROWS * sizeof(Enemy *));
+    for (int row_nb = 1; row_nb <= NB_ROWS; row_nb++) enemy_collumn[row_nb-1] = NULL;
+    /* Go trough all enemies */
+    Enemy *enemy = enemy_list;
+    while (enemy) {
+        if (enemy->collumn == collumn_nb) enemy_collumn[enemy->row-1] = enemy;
+        enemy = enemy->next;
+    }
+    return enemy_collumn;
+}
+
+/* Get the first enemy of a row */
+Enemy *getFirstEnemyInRow(Enemy *enemy_list, int row) {
+    Enemy **first_of_each_row = getFirstEnemyOfAllRows(enemy_list);
+    Enemy *first_of_row = first_of_each_row[row-1];
+    free(first_of_each_row);
+    return first_of_row;
+}
+
+/* Move enemy, return 1 if was able to move at least 1 space, otherwise return 0 */
+bool moveEnemy(Enemy *enemy, int delta, char axis) {
+    /* Move on the x axis */
+    if (axis == 'x' || axis == 'X') {
+        /* Limit to moving backwards (right) */
+        if (delta > 0) {if (enemy->next_on_row) delta = min(delta, enemy->next_on_row->collumn - enemy->collumn - 1);}
+        /* Limit to moving forward (left) */
+        else if (delta < 0) if (enemy->prev_on_row) delta = max(delta, enemy->prev_on_row->collumn - enemy->collumn + 1);
+        /* Moving */
+        enemy->collumn += delta;
+        /* Return 1 if the enemy moved, 0 otherwise */
+        return delta != 0;
+    }
+    /* Move on the y axis */
+    if (axis == 'y' || axis == 'Y') {
+        Enemy **enemy_collumn = getEnemyInCollumn(enemy, enemy->collumn);
+        int i;
+        /* Limit to moving downward */
+        if (delta > 0) {for (i = 0; i < delta && enemy->row+i+1 <= NB_ROWS && !enemy_collumn[enemy->row+i+1 - 1]; i++) delta = i;}
+        /* Limit to moving upward */
+        else if (delta < 0) for (i = 0; i > delta && enemy->row+i-1 >= 1 && !enemy_collumn[enemy->row+i-1 - 1]; i--) delta = i;
+        /* Free memory */
+        free(enemy_collumn);
+        /* Return 1 if the enemy moved, 0 otherwise */
+        if (!delta) return false;
+        /* Moving */
+        if (enemy->next_on_row) enemy->next_on_row->prev_on_row = enemy->prev_on_row;
+        if (enemy->prev_on_row) enemy->prev_on_row->next_on_row = enemy->next_on_row;
+        enemy->row += delta;
+        Enemy *first_of_row = getFirstEnemyInRow(enemy, enemy->row);
+        /* Getting the first enemy in front of the moved one */
+        while (first_of_row && first_of_row->next_on_row && !(first_of_row->collumn < enemy->collumn && enemy->collumn < first_of_row->next_on_row->collumn)) first_of_row = first_of_row->next_on_row;
+        enemy->prev_on_row = first_of_row;
+        if (first_of_row) {
+            enemy->next_on_row = first_of_row->next_on_row;
+            if (first_of_row->next_on_row) first_of_row->next_on_row->prev_on_row = enemy;
+            first_of_row->next_on_row = enemy;
+        }
+        else enemy->next_on_row = NULL;
+        return true;
+    }
+    /* Invalid axis */
+    printf("[ERROR]    Can only move an enemy on the 'x' or 'y' axis, not on the '%c' axis\n", axis);
+    return false;
+}
+
+/* Update all enemies by simulating a turn passing */
+void updateEnemies(Enemy *enemy_list, SDL_Renderer *rend) {
+    /* Update enemies from left to right, from top to bottom */
+    Enemy **first_of_each_row = getFirstEnemyOfAllRows(enemy_list);
+    Enemy *enemy;
+    /* From top to bottom */
+    for (int row_nb = 1; row_nb <= NB_ROWS; row_nb++) {
+        enemy = first_of_each_row[row_nb-1];
+        /* From left to right */
+        while (enemy) {
+            // SDL_SetRenderDrawColor(rend, 0, 0, 0, 255);
+            // SDL_RenderClear(rend);
+            // drawEnemies(rend, enemy_list);
+            // SDL_RenderPresent(rend);
+            // SDL_Delay(250);
+            if (enemy->collumn >= NB_COLLUMNS) enemy->speed = 1;
+            moveEnemy(enemy, -enemy->speed, 'x');
+            enemy->speed = enemy->base_speed;
+            enemy = enemy->next_on_row;
+        }
+    }
+    /* Free memory */
+    free(first_of_each_row);
 }
 
 /* Draw all enemies, affected by camera position */
 void drawEnemies(SDL_Renderer *rend, Enemy *enemy_list) {
-    while (enemy_list) {
-        drawImgDynamic(rend, enemy_list->sprite, TILE_WIDTH * enemy_list->collumn, TILE_HEIGHT * (enemy_list->row - 1), SPRITE_SIZE, SPRITE_SIZE);
-        enemy_list = enemy_list->next;
+    /* Draw enemies from left to right, from top to bottom */
+    Enemy **first_of_each_row = getFirstEnemyOfAllRows(enemy_list);
+    Enemy *enemy;
+    /* From top to bottom */
+    for (int row_nb = 1; row_nb <= NB_ROWS; row_nb++) {
+        enemy = first_of_each_row[row_nb-1];
+        /* From left to right */
+        while (enemy) {
+            drawImgDynamic(rend, enemy->sprite, TILE_WIDTH * enemy->collumn, TILE_HEIGHT * (row_nb-1), SPRITE_SIZE, SPRITE_SIZE);
+            enemy = enemy->next_on_row;
+        }
     }
+    /* Free memory */
+    free(first_of_each_row);
 }
 
 
@@ -438,6 +565,10 @@ int main(int argc, char* argv[]) {
                             break;
                         case SDL_SCANCODE_LCTRL:
                             cam_speed_mult = -1;
+                            break;
+                        /* [TEMPORARY] Play 1 turn */
+                        case SDL_SCANCODE_SPACE:
+                            updateEnemies(waves[0]->enemies, rend);
                             break;
                         default:
                             break;
