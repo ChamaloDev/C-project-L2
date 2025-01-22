@@ -3,7 +3,6 @@
 #include <string.h>
 #include <stdbool.h>
 #include "src/SDL2/include/SDL2/SDL.h"
-
 #define FULLSCREEN false   // Set if the game should start on fullscreen (F11 to toggle on/off)
 #define FPS 60             // Game target FPS
 #define NB_ROWS 7          // Number of rows for the map
@@ -11,14 +10,19 @@
 #define TILE_WIDTH 256     // Width of a tile in px
 #define TILE_HEIGHT 192    // Height of a tile in px
 #define SPRITE_SIZE 320    // Height and width of all sprites in px
+#define BASE_CAM_SPEED 10  // Default camera speed when moving using WASD
+#define CAM_SPEED_MULT 3   // Camera speed multiplier when using lShift or lCtrl
 
 
 
+/* Window's dimensions */
+int WINDOW_WIDTH = 1280;
+int WINDOW_HEIGHT = 720;
 
-/* Position of the camera */
-double cam_scale = 0.5;
-double cam_pos_x = 0.0;
-double cam_pos_y = 0.0;
+/* Data of the camera */
+double CAM_SCALE = 0.5;
+double CAM_POS_X = 0.0;
+double CAM_POS_Y = 0.0;
 
 
 
@@ -168,11 +172,11 @@ bool addEnemy(Enemy **enemy_list, char enemy_type, int spawn_row, int spawn_coll
         if (current->row == new_enemy->row) {
             /* Enemy located on the same row and in front of this new enemy */
             if (current->collumn < new_enemy->collumn) {
-                if (!(new_enemy->prev_on_row) || new_enemy->prev_on_row->collumn > new_enemy->collumn) new_enemy->prev_on_row = current;
+                if (!new_enemy->prev_on_row || new_enemy->prev_on_row->collumn > new_enemy->collumn) new_enemy->prev_on_row = current;
             }
             /* Enemy located on the same row and behind this new enemy */
             else if (current->collumn > new_enemy->collumn) {
-                if (!(new_enemy->next_on_row) || new_enemy->next_on_row->collumn < new_enemy->collumn) new_enemy->next_on_row = current;
+                if (!new_enemy->next_on_row || new_enemy->next_on_row->collumn < new_enemy->collumn) new_enemy->next_on_row = current;
             }
             /* Enemy located on the same exact spot as this new enemy, cannot spawn properly */
             else {
@@ -180,7 +184,7 @@ bool addEnemy(Enemy **enemy_list, char enemy_type, int spawn_row, int spawn_coll
                 return false;
             }
         }
-        if (!(current->next)) break;
+        if (!current->next) break;
         current = current->next;
     }
     /* Add the new enemy to the enemy list */
@@ -204,17 +208,17 @@ void drawEnemies(SDL_Renderer *rend, Enemy *enemy_list) {
 
 /* Return if the caracter is considered to be a whitespace */
 bool isWhitespace(char c) {
-    return (!(c)) || (c == ' ') || (c == '\n') || (c == '\r') || (c == '\t');
+    return (!c) || (c == ' ') || (c == '\n') || (c == '\r') || (c == '\t');
 }
 
 /* Read a singular value on a line, move line pointer after the value read */
 bool readValue(char **line, char **value) {
-    if (!(line) || !(*line)) return false;
+    if (!line || !(*line)) return false;
     /* Get to the first value of the line, ignore all whitespaces before it */
     while (**line && isWhitespace(**line)) (*line)++;
     char *start = *line;
     /* Find the end of the word */
-    while (!(isWhitespace(**line))) (*line)++;
+    while (!isWhitespace(**line)) (*line)++;
     /* If the value read is an empty string, it means that the line does not contain any value */
     if (start == *line) return NULL;
     /* Copy the value read into the value variable */
@@ -230,7 +234,7 @@ bool readValue(char **line, char **value) {
 bool readLine(FILE *file, char ***values, int *nb_values) {
     /* Get the full line */
     char *line_buffer = malloc(256 * sizeof(char));
-    if (!(fgets(line_buffer, 256, file))) {
+    if (!fgets(line_buffer, 256, file)) {
         free(line_buffer);
         return false;
     }
@@ -241,9 +245,6 @@ bool readLine(FILE *file, char ***values, int *nb_values) {
         *values = realloc(*values, (*nb_values) * sizeof(char *));
         (*values)[*nb_values - 1] = value;
     }
-    free(line_buffer);
-    for (int i = 0; i < *nb_values; i++) printf("%s ", (*values)[i]);
-    printf("\n");
     return true;
 }
 
@@ -256,7 +257,7 @@ bool loadLevel(const char *path, Wave ***waves, int *nb_waves) {
     FILE *file = fopen(full_path, "r");
     free(partial_path);
     /* Checking if file was open successfully */
-    if (!(file)) {
+    if (!file) {
         printf("[ERROR]    Level file at \"%s\" not found\n", full_path);
         free(full_path);
         return false;
@@ -321,12 +322,8 @@ void delImg(SDL_Surface *img) {
 
 /* Draw an image on the window surface */
 void drawImgStatic(SDL_Renderer *rend, SDL_Surface *img, int pos_x, int pos_y, int width, int height) {
-    /* Getting window size */
-    int wind_width, wind_height;
-    SDL_Window *wind = SDL_RenderGetWindow(rend);
-    SDL_GetWindowSizeInPixels(wind, &wind_width, &wind_height);
     /* Destination area */
-    SDL_Rect dest = {pos_x + wind_width/2, pos_y + wind_height/2, width, height};
+    SDL_Rect dest = {pos_x + WINDOW_WIDTH/2, pos_y + WINDOW_HEIGHT/2, width, height};
     /* Convert surface to texture and draw it */
     SDL_Texture *sprite = SDL_CreateTextureFromSurface(rend, img);
     SDL_RenderCopy(rend, sprite, NULL, &dest);
@@ -335,7 +332,7 @@ void drawImgStatic(SDL_Renderer *rend, SDL_Surface *img, int pos_x, int pos_y, i
 
 /* Draw an image on the window surface, affected by camera position */
 void drawImgDynamic(SDL_Renderer *rend, SDL_Surface *img, int pos_x, int pos_y, int width, int height) {
-    drawImgStatic(rend, img, (pos_x - cam_pos_x) * cam_scale, (pos_y - cam_pos_y) * cam_scale, width * cam_scale, height * cam_scale);
+    drawImgStatic(rend, img, (pos_x - CAM_POS_X) * CAM_SCALE, (pos_y - CAM_POS_Y) * CAM_SCALE, width * CAM_SCALE, height * CAM_SCALE);
 }
 
 /* Draw a rectangle */
@@ -357,8 +354,7 @@ int main(int argc, char* argv[]) {
         printf("Error initializing SDL: %s\n", SDL_GetError());
         return 0;
     }
-    
-    int WINDOW_WIDTH = 1280, WINDOW_HEIGHT=720; //default size for the window
+
     /* Create a window */
     SDL_Window* wind = SDL_CreateWindow("Game of the year", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, WINDOW_WIDTH, WINDOW_HEIGHT, 0);
     if (!wind) {
@@ -382,23 +378,21 @@ int main(int argc, char* argv[]) {
     // [DEBBUG]
     Wave **waves; int nb_waves;
     loadLevel("level_test", &waves, &nb_waves);
-	
-	
+
     /* Load images */
     SDL_Surface *archer_1=loadImg("others/archer_menu");
     SDL_Surface *towers[]={loadImg("towers/archer_tower_1")};
     SDL_Surface *grass_tiles[] = {loadImg("others/grass_tile_a"), loadImg("others/grass_tile_b"), loadImg("others/grass_tile_c"), loadImg("others/grass_tile_d")};
     /* Main loop */
-   	
-   	
+
+    int cam_x_speed = 0, cam_y_speed = 0, cam_speed_mult = 0;
+    bool menu_hidden = false;
+    int money = 0;  // [?] The Game object's fund attribute should be used instead
     bool mouse_dragging = false;
     bool fullscreen = FULLSCREEN;
     Uint64 tick = SDL_GetTicks64();
     SDL_Event event;
     bool running = true;
-    bool menu_hidden=false;
-    int money=0;
-    
     while (running) {
         /* Process events */
         while (SDL_PollEvent(&event)) {
@@ -413,14 +407,64 @@ int main(int argc, char* argv[]) {
                         case SDL_SCANCODE_ESCAPE:
                             running = false;
                             break;
+                        /* Turn on/off fullscreen mode */
                         case SDL_SCANCODE_F11:
                             fullscreen = !fullscreen;
                             SDL_SetWindowFullscreen(wind, SDL_WINDOW_FULLSCREEN_DESKTOP*fullscreen);
-                            SDL_GetWindowSize(wind,&WINDOW_WIDTH,&WINDOW_HEIGHT); // get the new values of width and height for the screen
+                            /* Update WINDOW_WIDTH and WINDOW_HEIGHT variables, also change CAM_SCALE to keep the same view */
+                            CAM_SCALE /= WINDOW_HEIGHT;
+                            SDL_GetWindowSize(wind, &WINDOW_WIDTH, &WINDOW_HEIGHT);
+                            CAM_SCALE *= WINDOW_HEIGHT;
                             break;
+                        /* Show/Hide menu */
                         case SDL_SCANCODE_F:
-                        	menu_hidden=!menu_hidden; //hide or open the menu with the key f
-                        	break;
+                            menu_hidden = !menu_hidden;
+                            break;
+                        /* Camera movement */
+                        case SDL_SCANCODE_W:
+                            cam_y_speed = -1;
+                            break;
+                        case SDL_SCANCODE_A:
+                            cam_x_speed = -1;
+                            break;
+                        case SDL_SCANCODE_S:
+                            cam_y_speed = +1;
+                            break;
+                        case SDL_SCANCODE_D:
+                            cam_x_speed = +1;
+                            break;
+                        case SDL_SCANCODE_LSHIFT:
+                            cam_speed_mult = +1;
+                            break;
+                        case SDL_SCANCODE_LCTRL:
+                            cam_speed_mult = -1;
+                            break;
+                        default:
+                            break;
+                    }
+                    break;
+                /* Key released */
+                case SDL_KEYUP:
+                    switch (event.key.keysym.scancode) {
+                        /* Camera movement */
+                        case SDL_SCANCODE_W:
+                            if (cam_y_speed == -1) cam_y_speed = 0;
+                            break;
+                        case SDL_SCANCODE_A:
+                            if (cam_x_speed == -1) cam_x_speed = 0;
+                            break;
+                        case SDL_SCANCODE_S:
+                            if (cam_y_speed == +1) cam_y_speed = 0;
+                            break;
+                        case SDL_SCANCODE_D:
+                            if (cam_x_speed == +1) cam_x_speed = 0;
+                            break;
+                        case SDL_SCANCODE_LSHIFT:
+                            if (cam_speed_mult == +1) cam_speed_mult = 0;
+                            break;
+                        case SDL_SCANCODE_LCTRL:
+                            if (cam_speed_mult == -1) cam_speed_mult = 0;
+                            break;
                         default:
                             break;
                     }
@@ -432,7 +476,7 @@ int main(int argc, char* argv[]) {
                             mouse_dragging = true;
                             break;
                         case SDL_BUTTON_LEFT:
-                        	break;
+                            break;
                         default:
                             break;
                     }
@@ -444,21 +488,21 @@ int main(int argc, char* argv[]) {
                             mouse_dragging = false;
                             break;
                         case SDL_BUTTON_LEFT:
-                        	mouse_dragging = false;
-                        	break;
+                            mouse_dragging = false;  // [?] Is this line needed, or can we delete this
+                            break;
                         default:
                             break;
-                    	}
+                        }
                     break;
                 /* Mouse wheel used */
                 case SDL_MOUSEWHEEL:
-                    cam_scale = min(max(0.2, cam_scale*pow(1.05, event.wheel.y)), 2.0);
+                    CAM_SCALE = min(max(0.0002*WINDOW_HEIGHT, CAM_SCALE*pow(1.05, event.wheel.y)), 0.002*WINDOW_HEIGHT);
                     break;
                 /* Mouse moved */
                 case SDL_MOUSEMOTION:
                     if (mouse_dragging) {
-                        cam_pos_x -= event.motion.xrel / cam_scale;
-                        cam_pos_y -= event.motion.yrel / cam_scale;
+                        CAM_POS_X -= event.motion.xrel / CAM_SCALE;
+                        CAM_POS_Y -= event.motion.yrel / CAM_SCALE;
                     }
                     // printf("%d / %d\n",event.motion.x,event.motion.y); // mouse position debug 
                     break;
@@ -470,21 +514,22 @@ int main(int argc, char* argv[]) {
         /* Clear screen */
         SDL_SetRenderDrawColor(rend, 0, 0, 0, 255);
         SDL_RenderClear(rend);
+        /* Move camera */
+        CAM_POS_X += BASE_CAM_SPEED * cam_x_speed * pow(CAM_SPEED_MULT, cam_speed_mult) * pow(1.4142/2, cam_x_speed && cam_y_speed) / CAM_SCALE;
+        CAM_POS_Y += BASE_CAM_SPEED * cam_y_speed * pow(CAM_SPEED_MULT, cam_speed_mult) * pow(1.4142/2, cam_x_speed && cam_y_speed) / CAM_SCALE;
         /* Draw elements */
         for (int y = 0; y < NB_ROWS; y++) {
             for (int x = 0; x < NB_COLLUMNS; x++) {
                 drawImgDynamic(rend, grass_tiles[x%2 + (y%2) * 2], TILE_WIDTH * x, TILE_HEIGHT * y, SPRITE_SIZE, SPRITE_SIZE);
             }
         }
-        //Draw the Menu if necessary
-        if (menu_hidden==false){
-		    drawFilledRect(rend,0,0,WINDOW_WIDTH,WINDOW_HEIGHT/4,128,128,128,255);
-		    drawRect(rend,0,0,WINDOW_WIDTH,WINDOW_HEIGHT/4,255,255,255,255);
-		    drawImgStatic(rend,archer_1,-WINDOW_WIDTH/2,-WINDOW_HEIGHT/2,SPRITE_SIZE/2,SPRITE_SIZE/2);
-		}
         drawEnemies(rend, waves[0]->enemies);
-        
-        
+        /* Draw the Menu if necessary */
+        if (menu_hidden==false){
+            drawFilledRect(rend,0,0,WINDOW_WIDTH,WINDOW_HEIGHT/4,128,128,128,255);
+            drawRect(rend,0,0,WINDOW_WIDTH,WINDOW_HEIGHT/4,255,255,255,255);
+            drawImgStatic(rend,archer_1,-WINDOW_WIDTH/2,-WINDOW_HEIGHT/2,SPRITE_SIZE/2,SPRITE_SIZE/2);
+        }
         /* Draw to window and loop */
         SDL_RenderPresent(rend);
         SDL_Delay(max(1000/FPS - (SDL_GetTicks64()-tick), 0));
