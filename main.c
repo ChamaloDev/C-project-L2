@@ -34,7 +34,7 @@ typedef struct tower {
     int row;               // Row number of the tower, 0 being the topmost row
     int collumn;           // Collumn number of the tower, 0 being the leftmost collumn
     int cost;              // Placement cost of the tower
-    struct tower* next;  // Pointer to the next tower placed
+    struct tower* next;    // Pointer to the next tower placed
     SDL_Surface *sprite;   // Sprite of the tower
 } Tower;
 
@@ -79,7 +79,7 @@ Enemy **getFirstEnemyOfAllRows(Enemy *enemy_list);
 Enemy **getEnemyInCollumn(Enemy *enemy_list, int collumn_nb);
 Enemy *getFirstEnemyInRow(Enemy *enemy_list, int row);
 bool moveEnemy(Enemy *enemy, int delta, char axis);
-// void updateEnemies(Enemy *enemy_list);
+void updateEnemies(Enemy *enemy_list);
 void drawEnemies(SDL_Renderer *rend, Enemy *enemy_list);
 bool isWhitespace(char c);
 bool readValue(char **line, char **value);
@@ -287,7 +287,7 @@ bool moveEnemy(Enemy *enemy, int delta, char axis) {
 }
 
 /* Update all enemies by simulating a turn passing */
-void updateEnemies(Enemy *enemy_list, SDL_Renderer *rend) {
+void updateEnemies(Enemy *enemy_list) {
     /* Update enemies from left to right, from top to bottom */
     Enemy **first_of_each_row = getFirstEnemyOfAllRows(enemy_list);
     Enemy *enemy;
@@ -296,11 +296,6 @@ void updateEnemies(Enemy *enemy_list, SDL_Renderer *rend) {
         enemy = first_of_each_row[row_nb-1];
         /* From left to right */
         while (enemy) {
-            // SDL_SetRenderDrawColor(rend, 0, 0, 0, 255);
-            // SDL_RenderClear(rend);
-            // drawEnemies(rend, enemy_list);
-            // SDL_RenderPresent(rend);
-            // SDL_Delay(250);
             if (enemy->collumn >= NB_COLLUMNS) enemy->speed = 1;
             moveEnemy(enemy, -enemy->speed, 'x');
             enemy->speed = enemy->base_speed;
@@ -568,7 +563,7 @@ int main(int argc, char* argv[]) {
                             break;
                         /* [TEMPORARY] Play 1 turn */
                         case SDL_SCANCODE_SPACE:
-                            updateEnemies(waves[0]->enemies, rend);
+                            updateEnemies(waves[0]->enemies);
                             break;
                         default:
                             break;
