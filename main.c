@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
+#include <time.h>
 #include "src/SDL2/include/SDL2/SDL.h"
 #define FULLSCREEN false   // Set if the game should start on fullscreen (F11 to toggle on/off)
 #define FPS 60             // Game target FPS
@@ -25,8 +26,18 @@ double CAM_SCALE = 0.5;
 double CAM_POS_X = 0.0;
 double CAM_POS_Y = 0.0;
 
+/* Current game tick */
+Uint64 CURRENT_TICK = 0;
 
 
+
+
+typedef struct {
+    Uint64 start_tick;  // Tick on which the animation started
+    Uint64 length;      // Length of the animation in ticks, -1 for infinite, afterward default to idle animation
+    char type;          // Type of animation, 'I' for idle, 'H' for hurt, 'D' for dead, 'A' for attack, 'M' for move
+    int *data;          // Additionnal data given to the animation
+} Animation;
 
 typedef struct tower {
     int type;              // Tower type, determine it's abilities, look and upgrades
@@ -36,6 +47,7 @@ typedef struct tower {
     int cost;              // Placement cost of the tower
     struct tower* next;    // Pointer to the next tower placed
     SDL_Surface *sprite;   // Sprite of the tower
+    Animation *anim;       // Animation of the tower
 } Tower;
 
 typedef struct enemy {
@@ -51,6 +63,7 @@ typedef struct enemy {
     struct enemy* next_on_row;  // Next enemy on the same row (behind this)
     struct enemy* prev_on_row;  // Previous enemy on the same row (in front of this)
     SDL_Surface *sprite;        // Sprite of the enemy
+    Animation *anim;            // Animation of the enemy
 } Enemy;
 
 typedef struct {
@@ -74,11 +87,24 @@ double max(double x, double y);
 double pow(double x, int n);
 char *concatString(const char *a, const char *b);
 int stringToInt(const char *str);
+int positive_modulo(int i, int n);
+double periodicFunctionSub(double x);
+double periodicFunction(Uint64 x);
+Animation *newAnim();
+void destroyAnim(Animation *anim);
+void setAnim(Animation *anim, char type, Uint64 length, int *data);
+void setAnimIdle(Animation *anim);
+void setAnimHurt(Animation *anim);
+void setAnimDead(Animation *anim);
+void setAnimAttack(Animation *anim, int side);
+void setAnimMove(Animation *anim, int dx, int dy);
+bool applyAnim(Animation *anim, SDL_Rect *rect);
 bool addEnemy(Enemy **enemy_list, char enemy_type, int spawn_row, int spawn_collumn);
+void destroyEnemy(Enemy *enemy, Enemy **enemy_list);
 Enemy **getFirstEnemyOfAllRows(Enemy *enemy_list);
 Enemy **getEnemyInCollumn(Enemy *enemy_list, int collumn_nb);
 Enemy *getFirstEnemyInRow(Enemy *enemy_list, int row);
-bool moveEnemy(Enemy *enemy, int delta, char axis);
+int moveEnemy(Enemy *enemy, int delta, char axis);
 void updateEnemies(Enemy *enemy_list);
 void drawEnemies(SDL_Renderer *rend, Enemy *enemy_list);
 bool isWhitespace(char c);
@@ -87,8 +113,8 @@ bool readLine(FILE *file, char ***values, int *nb_values);
 bool loadLevel(const char *path, Wave ***waves, int *nb_waves);
 SDL_Surface *loadImg(const char *path);
 void delImg(SDL_Surface *img);
-void drawImgStatic(SDL_Renderer *rend, SDL_Surface *img, int pos_x, int pos_y, int width, int height);
-void drawImgDynamic(SDL_Renderer *rend, SDL_Surface *img, int pos_x, int pos_y, int width, int height);
+void drawImgStatic(SDL_Renderer *rend, SDL_Surface *img, int pos_x, int pos_y, int width, int height, Animation *anim);
+void drawImgDynamic(SDL_Renderer *rend, SDL_Surface *img, int pos_x, int pos_y, int width, int height, Animation *anim);
 void drawRect(SDL_Renderer *rend, int pos_x, int pos_y, int width, int height, int red, int green, int blue, int alpha);
 void drawFilledRect(SDL_Renderer *rend, int pos_x, int pos_y, int width, int height, int red, int green, int blue, int alpha);
 
@@ -135,6 +161,105 @@ int stringToInt(const char *str) {
     return n;
 }
 
+int positive_modulo(int i, int n) {
+    return (n + (i % n)) % n;
+}
+
+double periodicFunctionSub(double x) {
+    return 1.0 / (24.0*x + 2.0) - x/2.0;
+}
+/* 1000-periodic function similar to the sin function */
+double periodicFunction(Uint64 x) {
+    x = positive_modulo(x, 1000);
+    if (x >= 750) return periodicFunctionSub(positive_modulo(x, 250) / 1000.0);
+    if (x >= 500) return 1.0 - periodicFunctionSub(0.25 - positive_modulo(x, 250) / 1000.0);
+    if (x >= 250) return 1.0 - periodicFunctionSub(positive_modulo(x, 250) / 1000.0);
+    return periodicFunctionSub(0.25 - positive_modulo(x, 250) / 1000.0);
+}
+
+
+
+/* Create a new animation object (set to idle animation) */
+Animation *newAnim() {
+    Animation *anim = malloc(sizeof(Animation));
+    anim->data = NULL;
+    setAnimIdle(anim);
+    return anim;
+}
+
+/* Destroy an animation object and free its allocated memory */
+void destroyAnim(Animation *anim) {
+    if (anim->data) free(anim->data);
+    free(anim);
+}
+
+/* Set the current annimation */
+void setAnim(Animation *anim, char type, Uint64 length, int *data) {
+    if (length == (Uint64) -1) anim->start_tick = rand();
+    else anim->start_tick = CURRENT_TICK;
+    anim->type = type;
+    anim->length = length;
+    if (anim->data) free(anim->data);
+    anim->data = data;
+}
+
+/* Set animation to idle */
+void setAnimIdle(Animation *anim) {
+    setAnim(anim, 'I', -1, NULL);
+}
+
+/* Set animation to hurt */
+void setAnimHurt(Animation *anim) {
+    setAnim(anim, 'H', 1000, NULL);
+}
+
+/* Set animation to dead */
+void setAnimDead(Animation *anim) {
+    setAnim(anim, 'D', 1000, NULL);
+}
+
+/* Set animation to attack */
+void setAnimAttack(Animation *anim, int side) {
+    int *data = malloc(1 * sizeof(int));
+    data[0] = side;
+    setAnim(anim, 'A', 1000, side);
+}
+
+/* Set animation to move (dx dy) tiles */
+void setAnimMove(Animation *anim, int dx, int dy) {
+    int *data = malloc(2 * sizeof(int));
+    data[0] = dx; data[1] = dy;
+    setAnim(anim, 'M', 3000, data);
+}
+
+/* Apply an animation (affect the destination rect of a texture) */
+bool applyAnim(Animation *anim, SDL_Rect *rect) {
+    double dx, dy;
+    switch (anim->type) {
+        /* Idle animation, (shrink up and down periodically) */
+        case 'I':
+            dx = 1 - periodicFunction((CURRENT_TICK - anim->start_tick) / 10) / 20;
+            dy = 1 + periodicFunction((CURRENT_TICK - anim->start_tick) / 10) / 10;
+            rect->x -= rect->w * (dx-1) / 2;
+            rect->y -= rect->h * (dy-1) * 2/3;
+            rect->w *= dx;
+            rect->h *= dy;
+            break;
+        /* Movement animation, (go to destination by doing small jumps) */
+        case 'M':
+            dx = (CURRENT_TICK - anim->start_tick) / (double) anim->length;
+            dy = periodicFunction((CURRENT_TICK - anim->start_tick) * 3) / 20;
+            rect->x -= anim->data[0] * (1-dx) * TILE_WIDTH * CAM_SCALE;
+            rect->y -= anim->data[1] * (1-dx) * TILE_HEIGHT * CAM_SCALE + dy * TILE_HEIGHT;
+            break;
+        default:
+            printf("[ERROR]    Undefined animation type '%c'\n", anim->type);
+            setAnimIdle(anim);
+            return false;
+    }
+    if (anim->length != (Uint64) -1 && CURRENT_TICK - anim->start_tick >= anim->length) setAnimIdle(anim);
+    return true;
+}
 
 
 
@@ -149,6 +274,7 @@ bool addEnemy(Enemy **enemy_list, char enemy_type, int spawn_row, int spawn_coll
     new_enemy->collumn = spawn_collumn;
     new_enemy->row = spawn_row;
     new_enemy->next = new_enemy->next_on_row = new_enemy->prev_on_row = NULL;
+    new_enemy->anim = newAnim();
     /* Match the enemy type to its stats */
     switch (enemy_type) {
         /* Slime */
@@ -204,6 +330,22 @@ bool addEnemy(Enemy **enemy_list, char enemy_type, int spawn_row, int spawn_coll
     return true;
 }
 
+/* Destroy an enemy and free its allocated memory */
+void destroyEnemy(Enemy *enemy, Enemy **enemy_list) {
+    /* Destroy enemy data */
+    if (enemy->sprite) SDL_FreeSurface(enemy->sprite);
+    if (enemy->anim) destroyAnim(enemy->anim);
+    /* Change pointers of enemies accordingly */
+    if (*enemy_list == enemy) {
+        *enemy_list = enemy->next;
+        return;
+    }
+    while (*enemy_list && (*enemy_list)->next != enemy) *enemy_list = (*enemy_list)->next;
+    if (enemy_list) (*enemy_list)->next = enemy->next;
+    if (enemy->prev_on_row) enemy->prev_on_row->next_on_row = enemy->next_on_row;
+    if (enemy->next_on_row) enemy->next_on_row->prev_on_row = enemy->prev_on_row;
+}
+
 /* Get an array containing the first enemy of each row, NULL if there is none on the row */
 Enemy **getFirstEnemyOfAllRows(Enemy *enemy_list) {
     /* Initializing to NULL */
@@ -240,8 +382,8 @@ Enemy *getFirstEnemyInRow(Enemy *enemy_list, int row) {
     return first_of_row;
 }
 
-/* Move enemy, return 1 if was able to move at least 1 space, otherwise return 0 */
-bool moveEnemy(Enemy *enemy, int delta, char axis) {
+/* Move enemy, return number of tile moved */
+int moveEnemy(Enemy *enemy, int delta, char axis) {
     /* Move on the x axis */
     if (axis == 'x' || axis == 'X') {
         /* Limit to moving backwards (right) */
@@ -250,8 +392,7 @@ bool moveEnemy(Enemy *enemy, int delta, char axis) {
         else if (delta < 0) if (enemy->prev_on_row) delta = max(delta, enemy->prev_on_row->collumn - enemy->collumn + 1);
         /* Moving */
         enemy->collumn += delta;
-        /* Return 1 if the enemy moved, 0 otherwise */
-        return delta != 0;
+        return delta;
     }
     /* Move on the y axis */
     if (axis == 'y' || axis == 'Y') {
@@ -263,8 +404,7 @@ bool moveEnemy(Enemy *enemy, int delta, char axis) {
         else if (delta < 0) for (i = 0; i > delta && enemy->row+i-1 >= 1 && !enemy_collumn[enemy->row+i-1 - 1]; i--) delta = i;
         /* Free memory */
         free(enemy_collumn);
-        /* Return 1 if the enemy moved, 0 otherwise */
-        if (!delta) return false;
+        if (!delta) return 0;
         /* Moving */
         if (enemy->next_on_row) enemy->next_on_row->prev_on_row = enemy->prev_on_row;
         if (enemy->prev_on_row) enemy->prev_on_row->next_on_row = enemy->next_on_row;
@@ -279,11 +419,11 @@ bool moveEnemy(Enemy *enemy, int delta, char axis) {
             first_of_row->next_on_row = enemy;
         }
         else enemy->next_on_row = NULL;
-        return true;
+        return delta;
     }
     /* Invalid axis */
     printf("[ERROR]    Can only move an enemy on the 'x' or 'y' axis, not on the '%c' axis\n", axis);
-    return false;
+    return 0;
 }
 
 /* Update all enemies by simulating a turn passing */
@@ -291,13 +431,15 @@ void updateEnemies(Enemy *enemy_list) {
     /* Update enemies from left to right, from top to bottom */
     Enemy **first_of_each_row = getFirstEnemyOfAllRows(enemy_list);
     Enemy *enemy;
+    int delta;
     /* From top to bottom */
     for (int row_nb = 1; row_nb <= NB_ROWS; row_nb++) {
         enemy = first_of_each_row[row_nb-1];
         /* From left to right */
         while (enemy) {
             if (enemy->collumn >= NB_COLLUMNS) enemy->speed = 1;
-            moveEnemy(enemy, -enemy->speed, 'x');
+            delta = moveEnemy(enemy, -enemy->speed, 'x');
+            if (delta) setAnimMove(enemy->anim, delta, 0);
             enemy->speed = enemy->base_speed;
             enemy = enemy->next_on_row;
         }
@@ -316,7 +458,7 @@ void drawEnemies(SDL_Renderer *rend, Enemy *enemy_list) {
         enemy = first_of_each_row[row_nb-1];
         /* From left to right */
         while (enemy) {
-            drawImgDynamic(rend, enemy->sprite, TILE_WIDTH * enemy->collumn, TILE_HEIGHT * (row_nb-1), SPRITE_SIZE, SPRITE_SIZE);
+            drawImgDynamic(rend, enemy->sprite, TILE_WIDTH * enemy->collumn, TILE_HEIGHT * (row_nb-1), SPRITE_SIZE, SPRITE_SIZE, enemy->anim);
             enemy = enemy->next_on_row;
         }
     }
@@ -443,9 +585,11 @@ void delImg(SDL_Surface *img) {
 }
 
 /* Draw an image on the window surface */
-void drawImgStatic(SDL_Renderer *rend, SDL_Surface *img, int pos_x, int pos_y, int width, int height) {
+void drawImgStatic(SDL_Renderer *rend, SDL_Surface *img, int pos_x, int pos_y, int width, int height, Animation *anim) {
     /* Destination area */
     SDL_Rect dest = {pos_x + WINDOW_WIDTH/2, pos_y + WINDOW_HEIGHT/2, width, height};
+    /* Apply animation if one is set */
+    if (anim) applyAnim(anim, &dest);
     /* Convert surface to texture and draw it */
     SDL_Texture *sprite = SDL_CreateTextureFromSurface(rend, img);
     SDL_RenderCopy(rend, sprite, NULL, &dest);
@@ -453,8 +597,8 @@ void drawImgStatic(SDL_Renderer *rend, SDL_Surface *img, int pos_x, int pos_y, i
 }
 
 /* Draw an image on the window surface, affected by camera position */
-void drawImgDynamic(SDL_Renderer *rend, SDL_Surface *img, int pos_x, int pos_y, int width, int height) {
-    drawImgStatic(rend, img, (pos_x - CAM_POS_X) * CAM_SCALE, (pos_y - CAM_POS_Y) * CAM_SCALE, width * CAM_SCALE, height * CAM_SCALE);
+void drawImgDynamic(SDL_Renderer *rend, SDL_Surface *img, int pos_x, int pos_y, int width, int height, Animation *anim) {
+    drawImgStatic(rend, img, (pos_x - CAM_POS_X) * CAM_SCALE, (pos_y - CAM_POS_Y) * CAM_SCALE, width * CAM_SCALE, height * CAM_SCALE, anim);
 }
 
 /* Draw a rectangle */
@@ -470,7 +614,12 @@ void drawFilledRect(SDL_Renderer *rend, int pos_x, int pos_y, int width, int hei
 }
 
 
+
+
 int main(int argc, char* argv[]) {
+    /* Initialize a new random seed */
+    srand(time(NULL));
+
     /* Initialize SDL */
     if (SDL_Init(SDL_INIT_EVERYTHING) != 0) {
         printf("Error initializing SDL: %s\n", SDL_GetError());
@@ -512,7 +661,6 @@ int main(int argc, char* argv[]) {
     int money = 0;  // [?] The Game object's fund attribute should be used instead
     bool mouse_dragging = false;
     bool fullscreen = FULLSCREEN;
-    Uint64 tick = SDL_GetTicks64();
     SDL_Event event;
     bool running = true;
     while (running) {
@@ -646,7 +794,7 @@ int main(int argc, char* argv[]) {
         /* Draw elements */
         for (int y = 0; y < NB_ROWS; y++) {
             for (int x = 0; x < NB_COLLUMNS; x++) {
-                drawImgDynamic(rend, grass_tiles[x%2 + (y%2) * 2], TILE_WIDTH * x, TILE_HEIGHT * y, SPRITE_SIZE, SPRITE_SIZE);
+                drawImgDynamic(rend, grass_tiles[x%2 + (y%2) * 2], TILE_WIDTH * x, TILE_HEIGHT * y, SPRITE_SIZE, SPRITE_SIZE, NULL);
             }
         }
         drawEnemies(rend, waves[0]->enemies);
@@ -654,12 +802,12 @@ int main(int argc, char* argv[]) {
         if (menu_hidden==false){
             drawFilledRect(rend,0,0,WINDOW_WIDTH,WINDOW_HEIGHT/4,128,128,128,255);
             drawRect(rend,0,0,WINDOW_WIDTH,WINDOW_HEIGHT/4,255,255,255,255);
-            drawImgStatic(rend,archer_1,-WINDOW_WIDTH/2,-WINDOW_HEIGHT/2,SPRITE_SIZE/2,SPRITE_SIZE/2);
+            drawImgStatic(rend,archer_1,-WINDOW_WIDTH/2,-WINDOW_HEIGHT/2,SPRITE_SIZE/2,SPRITE_SIZE/2,NULL);
         }
         /* Draw to window and loop */
         SDL_RenderPresent(rend);
-        SDL_Delay(max(1000/FPS - (SDL_GetTicks64()-tick), 0));
-        tick = SDL_GetTicks64();
+        SDL_Delay(max(1000/FPS - (SDL_GetTicks64()-CURRENT_TICK), 0));
+        CURRENT_TICK = SDL_GetTicks64();
         
     }
     
