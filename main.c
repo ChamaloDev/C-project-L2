@@ -222,7 +222,7 @@ void setAnimDead(Animation *anim) {
 void setAnimAttack(Animation *anim, int side) {
     int *data = malloc(1 * sizeof(int));
     data[0] = side;
-    setAnim(anim, 'A', 1000, side);
+    setAnim(anim, 'A', 1000, data);
 }
 
 /* Set animation to move (dx dy) tiles */
