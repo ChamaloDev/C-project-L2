@@ -41,13 +41,13 @@ typedef struct {
 
 typedef struct tower {
     int type;              // Tower type, determine it's abilities, look and upgrades
-    int live_points;       // Live points of the tower, when it reaches 0 or bellow the tower is destroyed
-    int row;               // Row number of the tower, 0 being the topmost row
-    int collumn;           // Collumn number of the tower, 0 being the leftmost collumn
-    int cost;              // Placement cost of the tower
-    struct tower* next;    // Pointer to the next tower placed
-    SDL_Surface *sprite;   // Sprite of the tower
-    Animation *anim;       // Animation of the tower
+    int live_points;       // Live points of the Tower, when it reaches 0 or bellow the Tower is destroyed
+    int row;               // Row number of the Tower, 0 being the topmost row
+    int collumn;           // Collumn number of the Tower, 0 being the leftmost collumn
+    int cost;              // Placement cost of the Tower
+    struct tower* next;    // Pointer to the next Tower placed
+    SDL_Surface *sprite;   // Sprite of the Tower
+    Animation *anim;       // Animation of the Tower
 } Tower;
 
 typedef struct enemy {
@@ -68,13 +68,13 @@ typedef struct enemy {
 
 typedef struct {
     Enemy *enemies;     // Enemies
-    int income;         // Availible funds to build defences
+    int income;         // Availible funds to build Tower
 } Wave;
 
 typedef struct {
-    Tower *defences;  // Defences
+    Tower *Tower;  // Tower
     Enemy *enemies;     // Enemies
-    int funds;          // Availible funds to build defences
+    int funds;          // Availible funds to build Tower
     int turn_nb;        // Turn number
 } Game;
 
@@ -117,9 +117,10 @@ void drawImgStatic(SDL_Renderer *rend, SDL_Surface *img, int pos_x, int pos_y, i
 void drawImgDynamic(SDL_Renderer *rend, SDL_Surface *img, int pos_x, int pos_y, int width, int height, Animation *anim);
 void drawRect(SDL_Renderer *rend, int pos_x, int pos_y, int width, int height, int red, int green, int blue, int alpha);
 void drawFilledRect(SDL_Renderer *rend, int pos_x, int pos_y, int width, int height, int red, int green, int blue, int alpha);
-
-
-
+void drawTower(SDL_Renderer *rend, Tower *Tower_list);
+bool AddTower(Tower **Tower_list,char Tower_type,int placement_row,int placement_collumn);
+void tileRectDynamic(int tile_x, int tile_y, SDL_Rect *rect,int wind_width,int wind_height);
+void tileRectStatic(int tile_x, int tile_y, SDL_Rect *rect,int wind_width,int wind_height);
 
 /* Return the minimum between x and y */
 double min(double x, double y) {return (x < y) ? x : y;}
@@ -566,6 +567,50 @@ bool loadLevel(const char *path, Wave ***waves, int *nb_waves) {
     return true;
 }
 
+//Same function as AddEnemy but for the Tower
+bool AddTower(Tower **tower_list,char tower_type,int placement_row,int placement_collumn){
+	if (1>placement_row||placement_row>NB_ROWS||1>placement_collumn||placement_collumn>NB_COLLUMNS) return false; // coordinates not existing on the tiles
+	
+	Tower *new_tower = malloc(sizeof(Tower));
+    new_tower->type = tower_type;
+    new_tower->collumn = placement_collumn;
+    new_tower->row = placement_row;
+    new_tower->next = NULL;
+    new_tower->anim = newAnim();
+    switch (tower_type){
+    	case 'A': // level 1 archer Tower
+    		new_tower->live_points=15; // can be changed for the meta
+    		new_tower->cost=50;
+    		new_tower->sprite=loadImg("Tower/archer_Tower_1");
+    		break;
+    	default:
+            printf("[ERROR] Unknown Tower type '%c'\n", tower_type);
+            free(new_tower);
+            return false;
+    }
+    if (!(*tower_list)) {
+        *tower_list = new_tower;
+        return true;
+    }
+	Tower *current = *tower_list; // verify the validity of its position (Tower can't be placed on the same tale)
+	while (current->next != NULL){
+		if (current->row == new_tower->row && current->collumn == new_tower->collumn){
+			free(new_tower);
+			return false;
+		}
+		current=current->next;
+	}
+	current->next=new_tower; // add the new Tower as the next Tower
+	return true;
+}
+
+void drawTower(SDL_Renderer *rend, Tower *tower_list) {
+    while (tower_list) {
+        drawImgDynamic(rend, tower_list->sprite, TILE_WIDTH * tower_list->collumn, TILE_HEIGHT * (tower_list->row - 1), SPRITE_SIZE, SPRITE_SIZE,tower_list->anim);
+        tower_list = tower_list->next;
+    }
+}
+
 
 
 
@@ -613,7 +658,24 @@ void drawFilledRect(SDL_Renderer *rend, int pos_x, int pos_y, int width, int hei
     SDL_RenderFillRect(rend, &rect);
 }
 
+void drawRectDynamic(SDL_Renderer *rend, int pos_x, int pos_y, int width, int height, int red, int green, int blue, int alpha) {
+    SDL_SetRenderDrawColor(rend, red, green, blue, alpha);
+    SDL_Rect rect = {(pos_x-CAM_POS_X)*CAM_SCALE, (pos_y-CAM_POS_Y)*CAM_SCALE, width, height};
+    SDL_RenderDrawRect(rend, &rect);
+}
 
+void tileRectStatic(int tile_x, int tile_y, SDL_Rect *rect,int wind_width,int wind_height) {
+    rect->x = (tile_x * TILE_WIDTH)+ wind_width / 2;
+	rect->y = (tile_y * TILE_HEIGHT)+ wind_height / 2;
+	rect->w = TILE_WIDTH;
+	rect->h = TILE_HEIGHT;
+}
+void tileRectDynamic(int tile_x, int tile_y, SDL_Rect *rect,int wind_width,int wind_height) {
+    	rect->x = (tile_x * TILE_WIDTH - CAM_POS_X) * CAM_SCALE + wind_width / 2;
+	rect->y = (tile_y * TILE_HEIGHT - CAM_POS_Y) * CAM_SCALE + wind_height / 2;
+	rect->w = TILE_WIDTH * CAM_SCALE;
+	rect->h = TILE_HEIGHT * CAM_SCALE;
+}
 
 
 int main(int argc, char* argv[]) {
@@ -651,18 +713,21 @@ int main(int argc, char* argv[]) {
     loadLevel("level_test", &waves, &nb_waves);
 
     /* Load images */
-    SDL_Surface *archer_1=loadImg("others/archer_menu");
-    SDL_Surface *towers[]={loadImg("towers/archer_tower_1")};
+    SDL_Surface *archer_1=loadImg("menu/archer_menu");
+    SDL_Surface *Towers[]={loadImg("Tower/archer_Tower_1")};
     SDL_Surface *grass_tiles[] = {loadImg("others/grass_tile_a"), loadImg("others/grass_tile_b"), loadImg("others/grass_tile_c"), loadImg("others/grass_tile_d")};
     /* Main loop */
 
     int cam_x_speed = 0, cam_y_speed = 0, cam_speed_mult = 0;
-    bool menu_hidden = false;
-    int money = 0;  // [?] The Game object's fund attribute should be used instead
+    bool menu_hidden = true;
     bool mouse_dragging = false;
     bool fullscreen = FULLSCREEN;
     SDL_Event event;
     bool running = true;
+    
+	Tower *tower_list=NULL;
+    
+    SDL_Rect tiles_list[NB_COLLUMNS*NB_ROWS];
     while (running) {
         /* Process events */
         while (SDL_PollEvent(&event)) {
@@ -750,6 +815,35 @@ int main(int argc, char* argv[]) {
                             mouse_dragging = true;
                             break;
                         case SDL_BUTTON_LEFT:
+                        	int tile_choosed=(NB_COLLUMNS*NB_ROWS)+1; //impossible tile
+                        	bool turret_placed_on_tile = false;
+                        	if (event.motion.x>tiles_list[0].x && event.motion.x<(tiles_list[sizeof(tiles_list)/sizeof(tiles_list[0])].x+TILE_WIDTH) && event.motion.y>tiles_list[0].y && event.motion.y<(tiles_list[sizeof(tiles_list)].y+TILE_HEIGHT)){ //cursor is on the tiles
+                        		for (long unsigned int i=0;i<(sizeof(tiles_list)/sizeof(tiles_list[0]));i++){
+                        			if (event.motion.x>tiles_list[i].x && event.motion.x<(tiles_list[i].x+TILE_WIDTH) && event.motion.y>tiles_list[i].y && event.motion.y<(tiles_list[i].y+TILE_HEIGHT)){
+                        				//cursor is on that tile
+                        				drawRectDynamic(rend,tiles_list[i].x,tiles_list[i].y,TILE_WIDTH,TILE_HEIGHT,255,255,255,255);
+                        				//we put the tile in white
+                        				tile_choosed = i;
+                        			}
+                        		menu_hidden = false;
+                        		}
+                        	}
+                        	if (!menu_hidden){
+                        		if ( tile_choosed < (NB_COLLUMNS*NB_ROWS)){
+                        			div_t col_row = div(tile_choosed,NB_COLLUMNS); // function of stdlib that gives the remainder and the quotient of his argument so the quotient is the row and the remainder the col of the tile
+                        			while ( tower_list->next != NULL){ //verify if there's already a turret on the tile
+                        				if (tower_list->row == col_row.quot && tower_list->collumn == col_row.rem){
+                        					turret_placed_on_tile=true;
+                        				}
+                        			}
+                        			if (!turret_placed_on_tile){
+                        				if (event.motion.x > 0 && event.motion.x < SPRITE_SIZE/2 && event.motion.y >0 && event.motion.y < SPRITE_SIZE/2){
+                        					AddTower(&tower_list,'A',col_row.quot,col_row.rem);
+                        				}	
+                        			}
+				        		}
+				        		menu_hidden=true;
+                        	}
                             break;
                         default:
                             break;
@@ -762,7 +856,6 @@ int main(int argc, char* argv[]) {
                             mouse_dragging = false;
                             break;
                         case SDL_BUTTON_LEFT:
-                            mouse_dragging = false;  // [?] Is this line needed, or can we delete this
                             break;
                         default:
                             break;
@@ -778,7 +871,7 @@ int main(int argc, char* argv[]) {
                         CAM_POS_X -= event.motion.xrel / CAM_SCALE;
                         CAM_POS_Y -= event.motion.yrel / CAM_SCALE;
                     }
-                    // printf("%d / %d\n",event.motion.x,event.motion.y); // mouse position debug 
+                    printf("%d / %d\n",event.motion.x,event.motion.y); // mouse position debug 
                     break;
                 default:
                     break;
@@ -797,7 +890,16 @@ int main(int argc, char* argv[]) {
                 drawImgDynamic(rend, grass_tiles[x%2 + (y%2) * 2], TILE_WIDTH * x, TILE_HEIGHT * y, SPRITE_SIZE, SPRITE_SIZE, NULL);
             }
         }
+        
+        
+	for (int y = 0; y < NB_ROWS; y++) {
+	    for (int x = 0; x < NB_COLLUMNS; x++) {
+	        tileRectDynamic(x,y,&(tiles_list[x+y]),WINDOW_WIDTH,WINDOW_HEIGHT);
+	        
+	    }
+	}
         drawEnemies(rend, waves[0]->enemies);
+        drawTower(rend,tower_list);
         /* Draw the Menu if necessary */
         if (menu_hidden==false){
             drawFilledRect(rend,0,0,WINDOW_WIDTH,WINDOW_HEIGHT/4,128,128,128,255);
