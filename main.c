@@ -79,13 +79,13 @@ typedef struct {
 } Game;
 
 typedef struct projectile{
-	int row; // coordinates of the projectile
-	int collumn;
-	SDL_Surface *sprite;
-	int damage; // damage based on the type of turret
-	Tower *tower; // tower linked to the projectile
-	struct projectile* next;
-	Animation *anim;
+    int row; // coordinates of the projectile
+    int collumn;
+    SDL_Surface *sprite;
+    int damage; // damage based on the type of turret
+    Tower *tower; // tower linked to the projectile
+    struct projectile* next;
+    Animation *anim;
 } Projectile;
 
 
@@ -114,15 +114,15 @@ void destroyEnemy(Enemy *enemy, Enemy **enemy_list);
 Enemy **getFirstEnemyOfAllRows(Enemy *enemy_list);
 Enemy **getEnemyInCollumn(Enemy *enemy_list, int collumn_nb);
 Enemy *getFirstEnemyInRow(Enemy *enemy_list, int row);
-int moveEnemy(Enemy *enemy, int delta, char axis);
-void updateEnemies(Enemy *enemy_list);
-void drawEnemies(SDL_Renderer *rend, Enemy *enemy_list);
+int moveEnemy(Enemy *enemy, int delta, char axis, Tower *tower_list);
+void updateEnemies(Enemy *enemy_list, Tower *tower_list);
 bool isWhitespace(char c);
 bool readValue(char **line, char **value);
 bool readLine(FILE *file, char ***values, int *nb_values);
 bool loadLevel(const char *path, Wave ***waves, int *nb_waves);
 SDL_Surface *loadImg(const char *path);
 void delImg(SDL_Surface *img);
+void drawEnemiesAndTowers(SDL_Renderer *rend, Enemy *enemy_list, Tower *tower_list);
 void dynamicToStatic(SDL_Rect *rect);
 void staticToDynamic(SDL_Rect *rect);
 void tileToPixel(int *x, int *y);
@@ -131,10 +131,7 @@ void drawImgStatic(SDL_Renderer *rend, SDL_Surface *img, int pos_x, int pos_y, i
 void drawImgDynamic(SDL_Renderer *rend, SDL_Surface *img, int pos_x, int pos_y, int width, int height, Animation *anim);
 void drawRect(SDL_Renderer *rend, int pos_x, int pos_y, int width, int height, int red, int green, int blue, int alpha);
 void drawFilledRect(SDL_Renderer *rend, int pos_x, int pos_y, int width, int height, int red, int green, int blue, int alpha);
-void drawTower(SDL_Renderer *rend, Tower *Tower_list);
 bool addTower(Tower **Tower_list,char Tower_type,int placement_row,int placement_collumn,int *funds);
-void tileRectDynamic(int tile_x, int tile_y, SDL_Rect *rect,int wind_width,int wind_height);
-void tileRectStatic(int tile_x, int tile_y, SDL_Rect *rect,int wind_width,int wind_height);
 void ShootProjectile(Tower *tower,Projectile **Projectile_list);
 void updateProjectile(Projectile *Projectile_list);
 void drawProjectiles(SDL_Renderer *rend, Tower *Projectile_list);
@@ -416,29 +413,68 @@ Enemy *getFirstEnemyInRow(Enemy *enemy_list, int row) {
 }
 
 /* Move enemy, return number of tile moved */
-int moveEnemy(Enemy *enemy, int delta, char axis) {
+int moveEnemy(Enemy *enemy, int delta, char axis, Tower *tower_list) {
+    Tower *tower;
+
     /* Move on the x axis */
     if (axis == 'x' || axis == 'X') {
         /* Limit to moving backwards (right) */
-        if (delta > 0) {if (enemy->next_on_row) delta = min(delta, enemy->next_on_row->collumn - enemy->collumn - 1);}
+        if (delta > 0) {
+            /* Colliding with other enemies */
+            if (enemy->next_on_row) delta = min(delta, enemy->next_on_row->collumn - enemy->collumn - 1);
+            /* Colliding with towers */
+            tower = tower_list;
+            while (tower) {
+                if (tower->row == enemy->row && tower->collumn > enemy->collumn) delta = min(delta, tower->collumn - enemy->collumn - 1);
+                tower = tower->next;
+            }
+        }
         /* Limit to moving forward (left) */
-        else if (delta < 0) if (enemy->prev_on_row) delta = max(delta, enemy->prev_on_row->collumn - enemy->collumn + 1);
-        /* Moving */
+        else if (delta < 0) {
+            /* Colliding with other enemies */
+            if (enemy->prev_on_row) delta = max(delta, enemy->prev_on_row->collumn - enemy->collumn + 1);
+            /* Colliding with towers */
+            tower = tower_list;
+            while (tower) {
+                if (tower->row == enemy->row && tower->collumn < enemy->collumn) delta = max(delta, tower->collumn - enemy->collumn + 1);
+                tower = tower->next;
+            }
+        }
+        /* Moving on the x axis */
         enemy->collumn += delta;
         return delta;
     }
+
     /* Move on the y axis */
     if (axis == 'y' || axis == 'Y') {
         Enemy **enemy_collumn = getEnemyInCollumn(enemy, enemy->collumn);
         int i;
         /* Limit to moving downward */
-        if (delta > 0) {for (i = 0; i < delta && enemy->row+i+1 <= NB_ROWS && !enemy_collumn[enemy->row+i+1 - 1]; i++) delta = i;}
+        if (delta > 0) {
+            /* Colliding with other enemies */
+            for (i = 0; i < delta && enemy->row+i+1 <= NB_ROWS && !enemy_collumn[enemy->row+i+1 - 1]; i++) delta = i;
+            /* Colliding with towers */
+            tower = tower_list;
+            while (tower) {
+                if (tower->collumn == enemy->collumn && tower->row > enemy->row) delta = min(delta, tower->row - enemy->row - 1);
+                tower = tower->next;
+            }
+        }
         /* Limit to moving upward */
-        else if (delta < 0) for (i = 0; i > delta && enemy->row+i-1 >= 1 && !enemy_collumn[enemy->row+i-1 - 1]; i--) delta = i;
+        else if (delta < 0) {
+            /* Colliding with other enemies */
+            for (i = 0; i > delta && enemy->row+i-1 >= 1 && !enemy_collumn[enemy->row+i-1 - 1]; i--) delta = i;
+            /* Colliding with towers */
+            tower = tower_list;
+            while (tower) {
+                if (tower->collumn == enemy->collumn && tower->row < enemy->row) delta = max(delta, tower->row - enemy->row + 1);
+                tower = tower->next;
+            }
+        }
         /* Free memory */
         free(enemy_collumn);
         if (!delta) return 0;
-        /* Moving */
+        /* Moving on the y axis */
         if (enemy->next_on_row) enemy->next_on_row->prev_on_row = enemy->prev_on_row;
         if (enemy->prev_on_row) enemy->prev_on_row->next_on_row = enemy->next_on_row;
         enemy->row += delta;
@@ -454,13 +490,14 @@ int moveEnemy(Enemy *enemy, int delta, char axis) {
         else enemy->next_on_row = NULL;
         return delta;
     }
+
     /* Invalid axis */
     printf("[ERROR]    Can only move an enemy on the 'x' or 'y' axis, not on the '%c' axis\n", axis);
     return 0;
 }
 
 /* Update all enemies by simulating a turn passing */
-void updateEnemies(Enemy *enemy_list) {
+void updateEnemies(Enemy *enemy_list, Tower *tower_list) {
     /* Update enemies from left to right, from top to bottom */
     Enemy **first_of_each_row = getFirstEnemyOfAllRows(enemy_list);
     Enemy *enemy;
@@ -471,7 +508,7 @@ void updateEnemies(Enemy *enemy_list) {
         /* From left to right */
         while (enemy) {
             if (enemy->collumn > NB_COLLUMNS) enemy->speed = 1;
-            delta = moveEnemy(enemy, -enemy->speed, 'x');
+            delta = moveEnemy(enemy, -enemy->speed, 'x', tower_list);
             if (delta) setAnimMove(enemy->anim, delta, 0);
             enemy->speed = enemy->base_speed;
             enemy = enemy->next_on_row;
@@ -480,25 +517,6 @@ void updateEnemies(Enemy *enemy_list) {
     /* Free memory */
     free(first_of_each_row);
 }
-
-/* Draw all enemies, affected by camera position */
-void drawEnemies(SDL_Renderer *rend, Enemy *enemy_list) {
-    /* Draw enemies from left to right, from top to bottom */
-    Enemy **first_of_each_row = getFirstEnemyOfAllRows(enemy_list);
-    Enemy *enemy;
-    /* From top to bottom */
-    for (int row_nb = 1; row_nb <= NB_ROWS; row_nb++) {
-        enemy = first_of_each_row[row_nb-1];
-        /* From left to right */
-        while (enemy) {
-            drawImgDynamic(rend, enemy->sprite, TILE_WIDTH * (enemy->collumn-1), TILE_HEIGHT * (row_nb-1), SPRITE_SIZE, SPRITE_SIZE, enemy->anim);
-            enemy = enemy->next_on_row;
-        }
-    }
-    /* Free memory */
-    free(first_of_each_row);
-}
-
 
 
 
@@ -628,10 +646,10 @@ bool addTower(Tower **tower_list, char tower_type, int placement_row, int placem
             return false;
     }
     if (*funds<new_tower->cost){
-    	return false;
+        return false;
     }
     else{
-    	*funds-=new_tower->cost;
+        *funds-=new_tower->cost;
     }
     if (!(*tower_list)) {
         *tower_list = new_tower;
@@ -651,16 +669,9 @@ bool addTower(Tower **tower_list, char tower_type, int placement_row, int placem
     return true;
 }
 
-void drawTower(SDL_Renderer *rend, Tower *tower_list) {
-    while (tower_list) {
-        drawImgDynamic(rend, tower_list->sprite, TILE_WIDTH * (tower_list->collumn - 1), TILE_HEIGHT * (tower_list->row - 1), SPRITE_SIZE, SPRITE_SIZE,tower_list->anim);
-        tower_list = tower_list->next;
-    }
-}
-
 /* Destroy an tower and free its allocated memory */
 void destroyTower(Tower *tower, Tower **tower_list) {
-	if (!tower ||!tower_list) return;
+    if (!tower ||!tower_list) return;
     /* Destroy tower data */
     if (tower->sprite) SDL_FreeSurface(tower->sprite);
     if (tower->anim) destroyAnim(tower->anim);
@@ -671,42 +682,40 @@ void destroyTower(Tower *tower, Tower **tower_list) {
     }
     while (*tower_list && (*tower_list)->next != tower)*tower_list = (*tower_list)->next; 
     if (tower_list) (*tower_list)->next = tower->next;
-	free(tower);
+    free(tower);
 }
 
 void ShootProjectile(Tower *tower,Projectile **Projectile_list){
-	Projectile *new_projectile = malloc(sizeof(Projectile));
-	new_projectile->row = tower->row;
-	new_projectile->collumn = tower->collumn;
-	new_projectile->tower = tower;
-	new_projectile->anim = newAnim();
-	switch ( tower->type){
-		case 'A':
-			new_projectile->sprite = SDL_LoadBMP("projectile/arrow");
-			break;
-		default :
-			new_projectile->sprite = SDL_LoadBMP("projectile/white_line");
-			break;
-	}
-	if (!(*Projectile_list)) {
-        	*Projectile_list = new_projectile;
-        	return;
-    	}
-	Projectile *current = *Projectile_list; 
+    Projectile *new_projectile = malloc(sizeof(Projectile));
+    new_projectile->row = tower->row;
+    new_projectile->collumn = tower->collumn;
+    new_projectile->tower = tower;
+    new_projectile->anim = newAnim();
+    switch ( tower->type){
+        case 'A':
+            new_projectile->sprite = SDL_LoadBMP("projectile/arrow");
+            break;
+        default :
+            new_projectile->sprite = SDL_LoadBMP("projectile/white_line");
+            break;
+    }
+    if (!(*Projectile_list)) {
+            *Projectile_list = new_projectile;
+            return;
+        }
+    Projectile *current = *Projectile_list; 
     while (current->next != NULL) current = current->next;
     current->next = new_projectile; 
     return;
-	
+    
 }
 
 void updateProjectile(Projectile *Projectile_list){
-	while(Projectile_list){
-		Projectile_list->row = Projectile_list->row + 1; //we move forward the projectile
-		Projectile_list=Projectile_list->next;
-	}
+    while(Projectile_list){
+        Projectile_list->row = Projectile_list->row + 1; //we move forward the projectile
+        Projectile_list=Projectile_list->next;
+    }
 }
-
-
 
 void drawProjectiles(SDL_Renderer *rend, Tower *Projectile_list) {
     while (Projectile_list) {
@@ -714,6 +723,41 @@ void drawProjectiles(SDL_Renderer *rend, Tower *Projectile_list) {
         Projectile_list = Projectile_list->next;
     }
 }
+
+
+
+
+/* Draw on screen enemies and towers, from top to bottom */
+void drawEnemiesAndTowers(SDL_Renderer *rend, Enemy *enemy_list, Tower *tower_list) {
+    Enemy **first_of_each_row = getFirstEnemyOfAllRows(enemy_list);
+    Enemy *enemy; Tower *tower;
+    SDL_Rect dest;
+    /* Draw from top to bottom */
+    for (int row_nb = 1; row_nb <= NB_ROWS; row_nb++) {
+        /* Draw enemies on the current row */
+        enemy = first_of_each_row[row_nb-1];
+        while (enemy) {
+            dest.x = (enemy->collumn - 1) * TILE_WIDTH; dest.y = (enemy->row - 1) * TILE_HEIGHT; dest.w = SPRITE_SIZE; dest.h = SPRITE_SIZE;
+            drawImgDynamic(rend, enemy->sprite, dest.x, dest.y, dest.w, dest.h, enemy->anim);
+            enemy = enemy->next_on_row;
+        }
+        /* Draw towers on the current row */
+        tower = tower_list;
+        while (tower) {
+            if (tower->row == row_nb) {
+                dest.x = (tower->collumn - 1) * TILE_WIDTH; dest.y = (tower->row - 1) * TILE_HEIGHT; dest.w = SPRITE_SIZE; dest.h = SPRITE_SIZE;
+                drawImgDynamic(rend, tower->sprite, dest.x, dest.y, dest.w, dest.h, tower->anim);
+                drawImgDynamic(rend, tower->sprite, dest.x, dest.y, SPRITE_SIZE, SPRITE_SIZE, tower->anim);
+            }
+            tower = tower->next;
+        }
+    }
+    /* Free memory */
+    free(first_of_each_row);
+}
+
+
+
 
 /* Convert a rect from a dynamic position (dependant of the camera position) to a static position (constant) */
 void dynamicToStatic(SDL_Rect *rect) {
@@ -761,6 +805,7 @@ SDL_Surface *loadImg(const char *path) {
     return img;
 }
 
+/* Delete an image (surface) */
 void delImg(SDL_Surface *img) {
     SDL_FreeSurface(img);
 }
@@ -842,7 +887,7 @@ int main(int argc, char* argv[]) {
     Wave **waves; int nb_waves;
     loadLevel("level_test", &waves, &nb_waves);
     Tower *tower_list=NULL;
-	
+
     /* Load images */
     SDL_Surface *towers[]={loadImg("towers/Archer_tower")};
     SDL_Surface *grass_tiles[] = {loadImg("others/grass_tile_a"), loadImg("others/grass_tile_b"), loadImg("others/grass_tile_c"), loadImg("others/grass_tile_d")};
@@ -908,7 +953,7 @@ int main(int argc, char* argv[]) {
                             break;
                         /* [TEMPORARY] Play 1 turn */
                         case SDL_SCANCODE_SPACE:
-                            updateEnemies(waves[0]->enemies);
+                            updateEnemies(waves[0]->enemies, tower_list);
                             break;
                         default:
                             break;
@@ -976,9 +1021,9 @@ int main(int argc, char* argv[]) {
                                 }
                                 /* Place tower */
                                 if (is_tile_empty) {
-		                                if (0 <= event.motion.x && event.motion.x <= SPRITE_SIZE/2 && 0 <= event.motion.y && event.motion.y <= SPRITE_SIZE/2) {
-		                                    addTower(&tower_list, 'A', selected_tile_pos[1], selected_tile_pos[0],&funds);
-		                            	}
+                                        if (0 <= event.motion.x && event.motion.x <= SPRITE_SIZE/2 && 0 <= event.motion.y && event.motion.y <= SPRITE_SIZE/2) {
+                                            addTower(&tower_list, 'A', selected_tile_pos[1], selected_tile_pos[0],&funds);
+                                        }
                                 }
                                 menu_hidden=true;
                             }
@@ -1023,13 +1068,10 @@ int main(int argc, char* argv[]) {
         CAM_POS_X += BASE_CAM_SPEED * cam_x_speed * pow(CAM_SPEED_MULT, cam_speed_mult) * pow(1.4142/2, cam_x_speed && cam_y_speed) / CAM_SCALE;
         CAM_POS_Y += BASE_CAM_SPEED * cam_y_speed * pow(CAM_SPEED_MULT, cam_speed_mult) * pow(1.4142/2, cam_x_speed && cam_y_speed) / CAM_SCALE;
         /* Draw elements */
-        for (int y = 0; y < NB_ROWS; y++) {
-            for (int x = 0; x < NB_COLLUMNS; x++) {
+        for (int y = 0; y < NB_ROWS; y++) for (int x = 0; x < NB_COLLUMNS; x++) {
                 drawImgDynamic(rend, grass_tiles[x%2 + (y%2) * 2], TILE_WIDTH * x, TILE_HEIGHT * y, SPRITE_SIZE, SPRITE_SIZE, NULL);
-            }
         }
-        drawEnemies(rend, waves[0]->enemies);
-        drawTower(rend,tower_list);
+        drawEnemiesAndTowers(rend, waves[0]->enemies, tower_list);
         /* Draw the Menu if necessary */
         if (!menu_hidden){
             drawFilledRect(rend, 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT/4, 128, 128, 128, 255);
