@@ -22,9 +22,9 @@ int WINDOW_WIDTH = 1280;
 int WINDOW_HEIGHT = 720;
 
 /* Data of the camera */
-double CAM_SCALE = 0.5;
-double CAM_POS_X = 0.0;
-double CAM_POS_Y = 0.0;
+double CAM_SCALE = 0.225;
+double CAM_POS_X = (NB_COLLUMNS*TILE_WIDTH)/2;
+double CAM_POS_Y = (NB_ROWS*TILE_HEIGHT)/2;
 
 /* Current game tick */
 Uint64 CURRENT_TICK = 0;
@@ -82,12 +82,14 @@ typedef struct {
 
 
 /* Header */
+int randrange(int a, int b);
 double min(double x, double y);
 double max(double x, double y);
 double pow(double x, int n);
 char *concatString(const char *a, const char *b);
 int stringToInt(const char *str);
-int positive_modulo(int i, int n);
+int positive_div(int i, int n);
+int positive_mod(int i, int n);
 double periodicFunctionSub(double x);
 double periodicFunction(Uint64 x);
 Animation *newAnim();
@@ -113,14 +115,26 @@ bool readLine(FILE *file, char ***values, int *nb_values);
 bool loadLevel(const char *path, Wave ***waves, int *nb_waves);
 SDL_Surface *loadImg(const char *path);
 void delImg(SDL_Surface *img);
+void dynamicToStatic(SDL_Rect *rect);
+void staticToDynamic(SDL_Rect *rect);
+void tileToPixel(int *x, int *y);
+void pixelToTile(int *x, int *y);
 void drawImgStatic(SDL_Renderer *rend, SDL_Surface *img, int pos_x, int pos_y, int width, int height, Animation *anim);
 void drawImgDynamic(SDL_Renderer *rend, SDL_Surface *img, int pos_x, int pos_y, int width, int height, Animation *anim);
 void drawRect(SDL_Renderer *rend, int pos_x, int pos_y, int width, int height, int red, int green, int blue, int alpha);
 void drawFilledRect(SDL_Renderer *rend, int pos_x, int pos_y, int width, int height, int red, int green, int blue, int alpha);
 void drawTower(SDL_Renderer *rend, Tower *Tower_list);
-bool AddTower(Tower **Tower_list,char Tower_type,int placement_row,int placement_collumn);
+bool addTower(Tower **Tower_list,char Tower_type,int placement_row,int placement_collumn);
 void tileRectDynamic(int tile_x, int tile_y, SDL_Rect *rect,int wind_width,int wind_height);
 void tileRectStatic(int tile_x, int tile_y, SDL_Rect *rect,int wind_width,int wind_height);
+
+
+
+
+/* Return an integer between a and b (included) */
+int randrange(int a, int b) {
+    return positive_mod(rand(), abs(b-a)+1) + min(a, b);
+}
 
 /* Return the minimum between x and y */
 double min(double x, double y) {return (x < y) ? x : y;}
@@ -162,7 +176,13 @@ int stringToInt(const char *str) {
     return n;
 }
 
-int positive_modulo(int i, int n) {
+/* Used to get "a = q*b + r" with "0 <= r < b" */
+int positive_div(int i, int n) {
+    return (i - positive_mod(i, n)) / n;
+}
+
+/* Used to get "a = q*b + r" with "0 <= r < b" */
+int positive_mod(int i, int n) {
     return (n + (i % n)) % n;
 }
 
@@ -171,11 +191,11 @@ double periodicFunctionSub(double x) {
 }
 /* 1000-periodic function similar to the sin function */
 double periodicFunction(Uint64 x) {
-    x = positive_modulo(x, 1000);
-    if (x >= 750) return periodicFunctionSub(positive_modulo(x, 250) / 1000.0);
-    if (x >= 500) return 1.0 - periodicFunctionSub(0.25 - positive_modulo(x, 250) / 1000.0);
-    if (x >= 250) return 1.0 - periodicFunctionSub(positive_modulo(x, 250) / 1000.0);
-    return periodicFunctionSub(0.25 - positive_modulo(x, 250) / 1000.0);
+    x = positive_mod(x, 1000);
+    if (x >= 750) return periodicFunctionSub(positive_mod(x, 250) / 1000.0);
+    if (x >= 500) return 1.0 - periodicFunctionSub(0.25 - positive_mod(x, 250) / 1000.0);
+    if (x >= 250) return 1.0 - periodicFunctionSub(positive_mod(x, 250) / 1000.0);
+    return periodicFunctionSub(0.25 - positive_mod(x, 250) / 1000.0);
 }
 
 
@@ -196,8 +216,7 @@ void destroyAnim(Animation *anim) {
 
 /* Set the current annimation */
 void setAnim(Animation *anim, char type, Uint64 length, int *data) {
-    if (length == (Uint64) -1) anim->start_tick = rand();
-    else anim->start_tick = CURRENT_TICK;
+    anim->start_tick = CURRENT_TICK;
     anim->type = type;
     anim->length = length;
     if (anim->data) free(anim->data);
@@ -206,7 +225,9 @@ void setAnim(Animation *anim, char type, Uint64 length, int *data) {
 
 /* Set animation to idle */
 void setAnimIdle(Animation *anim) {
-    setAnim(anim, 'I', -1, NULL);
+    int *data = malloc(1 * sizeof(int));
+    data[0] = randrange(40, 100);
+    setAnim(anim, 'I', -1, data);
 }
 
 /* Set animation to hurt */
@@ -235,30 +256,31 @@ void setAnimMove(Animation *anim, int dx, int dy) {
 
 /* Apply an animation (affect the destination rect of a texture) */
 bool applyAnim(Animation *anim, SDL_Rect *rect) {
+    /* Go back to default animation (idle) when current one is over */
+    if (anim->length != (Uint64) -1 && CURRENT_TICK - anim->start_tick >= anim->length) setAnimIdle(anim);
     double dx, dy;
     switch (anim->type) {
         /* Idle animation, (shrink up and down periodically) */
         case 'I':
-            dx = 1 - periodicFunction((CURRENT_TICK - anim->start_tick) / 10) / 20;
-            dy = 1 + periodicFunction((CURRENT_TICK - anim->start_tick) / 10) / 10;
-            rect->x -= rect->w * (dx-1) / 2;
-            rect->y -= rect->h * (dy-1) * 2/3;
+            dx = 1.0 - periodicFunction((CURRENT_TICK - anim->start_tick) / (anim->data[0]/10.0)) / 20.0 + 1.0/40.0;
+            dy = 1.0 + periodicFunction((CURRENT_TICK - anim->start_tick) / (anim->data[0]/10.0)) / 10.0 - 1.0/20.0;
+            rect->x -= rect->w * (dx-1.0) / 2.0;
+            rect->y -= rect->h * (dy-1.0) * 2.0/3.0;
             rect->w *= dx;
             rect->h *= dy;
             break;
         /* Movement animation, (go to destination by doing small jumps) */
         case 'M':
             dx = (CURRENT_TICK - anim->start_tick) / (double) anim->length;
-            dy = periodicFunction((CURRENT_TICK - anim->start_tick) * 3) / 20;
-            rect->x -= anim->data[0] * (1-dx) * TILE_WIDTH * CAM_SCALE;
-            rect->y -= anim->data[1] * (1-dx) * TILE_HEIGHT * CAM_SCALE + dy * TILE_HEIGHT;
+            dy = periodicFunction((CURRENT_TICK - anim->start_tick) * 3.0) / 20.0;
+            rect->x -= anim->data[0] * (1.0-dx) * TILE_WIDTH;
+            rect->y -= anim->data[1] * (1.0-dx) * TILE_HEIGHT + dy * TILE_HEIGHT;
             break;
         default:
             printf("[ERROR]    Undefined animation type '%c'\n", anim->type);
             setAnimIdle(anim);
             return false;
     }
-    if (anim->length != (Uint64) -1 && CURRENT_TICK - anim->start_tick >= anim->length) setAnimIdle(anim);
     return true;
 }
 
@@ -438,7 +460,7 @@ void updateEnemies(Enemy *enemy_list) {
         enemy = first_of_each_row[row_nb-1];
         /* From left to right */
         while (enemy) {
-            if (enemy->collumn >= NB_COLLUMNS) enemy->speed = 1;
+            if (enemy->collumn > NB_COLLUMNS) enemy->speed = 1;
             delta = moveEnemy(enemy, -enemy->speed, 'x');
             if (delta) setAnimMove(enemy->anim, delta, 0);
             enemy->speed = enemy->base_speed;
@@ -459,7 +481,7 @@ void drawEnemies(SDL_Renderer *rend, Enemy *enemy_list) {
         enemy = first_of_each_row[row_nb-1];
         /* From left to right */
         while (enemy) {
-            drawImgDynamic(rend, enemy->sprite, TILE_WIDTH * enemy->collumn, TILE_HEIGHT * (row_nb-1), SPRITE_SIZE, SPRITE_SIZE, enemy->anim);
+            drawImgDynamic(rend, enemy->sprite, TILE_WIDTH * (enemy->collumn-1), TILE_HEIGHT * (row_nb-1), SPRITE_SIZE, SPRITE_SIZE, enemy->anim);
             enemy = enemy->next_on_row;
         }
     }
@@ -550,7 +572,7 @@ bool loadLevel(const char *path, Wave ***waves, int *nb_waves) {
                     free(full_path);
                     return false;
                 }
-                addEnemy(&((*waves)[*nb_waves - 1]->enemies), *(values[2]), stringToInt(values[1]), NB_COLLUMNS + stringToInt(values[0]) - 1);
+                addEnemy(&((*waves)[*nb_waves - 1]->enemies), *(values[2]), stringToInt(values[1]), NB_COLLUMNS + stringToInt(values[0]));
                 break;
             /* Invalid value count on line */
             default:
@@ -568,23 +590,30 @@ bool loadLevel(const char *path, Wave ***waves, int *nb_waves) {
 }
 
 //Same function as AddEnemy but for the Tower
-bool AddTower(Tower **tower_list,char tower_type,int placement_row,int placement_collumn){
-	if (1>placement_row||placement_row>NB_ROWS||1>placement_collumn||placement_collumn>NB_COLLUMNS) return false; // coordinates not existing on the tiles
-	
-	Tower *new_tower = malloc(sizeof(Tower));
+bool addTower(Tower **tower_list, char tower_type, int placement_row, int placement_collumn) {
+    /* Invalid position */
+    if (1 > placement_row || placement_row > NB_ROWS || 1 > placement_collumn || placement_collumn > NB_COLLUMNS) {
+        printf("[ERROR]    Invalid position for tower (x=%d, y=%d)", placement_collumn, placement_row);
+        return false;
+    }
+
+    /* Initialize a new Tower object */
+    Tower *new_tower = malloc(sizeof(Tower));
     new_tower->type = tower_type;
     new_tower->collumn = placement_collumn;
     new_tower->row = placement_row;
     new_tower->next = NULL;
     new_tower->anim = newAnim();
     switch (tower_type){
-    	case 'A': // level 1 archer Tower
-    		new_tower->live_points=15; // can be changed for the meta
-    		new_tower->cost=50;
-    		new_tower->sprite=loadImg("Tower/archer_Tower_1");
-    		break;
-    	default:
-            printf("[ERROR] Unknown Tower type '%c'\n", tower_type);
+        /* Level 1 archer tower */
+        case 'A':
+            new_tower->live_points = 15;
+            new_tower->cost = 50;
+            new_tower->sprite = loadImg("towers/Archer_tower");
+            break;
+        default:
+            printf("[ERROR] Unknown tower type '%c'\n", tower_type);
+            free(new_tower->anim);
             free(new_tower);
             return false;
     }
@@ -592,23 +621,59 @@ bool AddTower(Tower **tower_list,char tower_type,int placement_row,int placement
         *tower_list = new_tower;
         return true;
     }
-	Tower *current = *tower_list; // verify the validity of its position (Tower can't be placed on the same tale)
-	while (current->next != NULL){
-		if (current->row == new_tower->row && current->collumn == new_tower->collumn){
-			free(new_tower);
-			return false;
-		}
-		current=current->next;
-	}
-	current->next=new_tower; // add the new Tower as the next Tower
-	return true;
+    /* Verify if the creation space is empty, as towers cannot be build on an already occupied space */
+    Tower *current = *tower_list; 
+    while (current->next != NULL){
+        if (current->row == new_tower->row && current->collumn == new_tower->collumn){
+            free(new_tower->anim);
+            free(new_tower);
+            return false;
+        }
+        current = current->next;
+    }
+    current->next = new_tower; // add the new Tower as the next Tower
+    return true;
 }
 
 void drawTower(SDL_Renderer *rend, Tower *tower_list) {
     while (tower_list) {
-        drawImgDynamic(rend, tower_list->sprite, TILE_WIDTH * tower_list->collumn, TILE_HEIGHT * (tower_list->row - 1), SPRITE_SIZE, SPRITE_SIZE,tower_list->anim);
+        drawImgDynamic(rend, tower_list->sprite, TILE_WIDTH * (tower_list->collumn - 1), TILE_HEIGHT * (tower_list->row - 1), SPRITE_SIZE, SPRITE_SIZE,tower_list->anim);
         tower_list = tower_list->next;
     }
+}
+
+
+
+
+/* Convert a rect from a dynamic position (dependant of the camera position) to a static position (constant) */
+void dynamicToStatic(SDL_Rect *rect) {
+    (*rect).x = ((*rect).x - WINDOW_WIDTH/2) / CAM_SCALE + CAM_POS_X;
+    (*rect).y = ((*rect).y - WINDOW_HEIGHT/2) / CAM_SCALE + CAM_POS_Y;
+    (*rect).w /= CAM_SCALE;
+    (*rect).h /= CAM_SCALE;
+}
+
+/* Convert a rect from a static position (constant) to a dynamic position (dependant of the camera position) */
+void staticToDynamic(SDL_Rect *rect) {
+    (*rect).x = ((*rect).x - CAM_POS_X) * CAM_SCALE + WINDOW_WIDTH/2;
+    (*rect).y = ((*rect).y - CAM_POS_Y) * CAM_SCALE + WINDOW_HEIGHT/2;
+    (*rect).w *= CAM_SCALE;
+    (*rect).h *= CAM_SCALE;
+}
+
+/* Convert a position in tile to a position in pixel (dynamic position) */
+void tileToPixel(int *x, int *y) {
+    SDL_Rect rect = {(SPRITE_SIZE - TILE_WIDTH) / 2 + (*x - 1) * TILE_WIDTH, (SPRITE_SIZE - TILE_HEIGHT) + (*y - 1) * TILE_HEIGHT, 0, 0};
+    staticToDynamic(&rect);
+    *x = rect.x;
+    *y = rect.y;
+}
+/* Convert a position in pixel (dynamic position) to a position in tile */
+void pixelToTile(int *x, int *y) {
+    SDL_Rect rect = {*x, *y, 0, 0};
+    dynamicToStatic(&rect);
+    *x = positive_div(rect.x - (SPRITE_SIZE - TILE_WIDTH) / 2, TILE_WIDTH) + 1;
+    *y = positive_div(rect.y - (SPRITE_SIZE - TILE_HEIGHT), TILE_HEIGHT) + 1;
 }
 
 
@@ -620,6 +685,7 @@ SDL_Surface *loadImg(const char *path) {
     char *partial_path = concatString("./src/img/", path);
     char *full_path = concatString(partial_path, ".bmp");
     SDL_Surface *img = SDL_LoadBMP(full_path);
+    if (!img) printf("[ERROR]    Bitmap file at \"%s\" not found\n", full_path);
     free(partial_path);
     free(full_path);
     return img;
@@ -632,7 +698,7 @@ void delImg(SDL_Surface *img) {
 /* Draw an image on the window surface */
 void drawImgStatic(SDL_Renderer *rend, SDL_Surface *img, int pos_x, int pos_y, int width, int height, Animation *anim) {
     /* Destination area */
-    SDL_Rect dest = {pos_x + WINDOW_WIDTH/2, pos_y + WINDOW_HEIGHT/2, width, height};
+    SDL_Rect dest = {pos_x, pos_y, width, height};
     /* Apply animation if one is set */
     if (anim) applyAnim(anim, &dest);
     /* Convert surface to texture and draw it */
@@ -643,7 +709,14 @@ void drawImgStatic(SDL_Renderer *rend, SDL_Surface *img, int pos_x, int pos_y, i
 
 /* Draw an image on the window surface, affected by camera position */
 void drawImgDynamic(SDL_Renderer *rend, SDL_Surface *img, int pos_x, int pos_y, int width, int height, Animation *anim) {
-    drawImgStatic(rend, img, (pos_x - CAM_POS_X) * CAM_SCALE, (pos_y - CAM_POS_Y) * CAM_SCALE, width * CAM_SCALE, height * CAM_SCALE, anim);
+    /* Destination area */
+    SDL_Rect dest = {pos_x, pos_y, width, height};
+    /* Apply animation if one is set */
+    if (anim) applyAnim(anim, &dest);
+    /* Convert static position to dynamic one */
+    staticToDynamic(&dest);
+    /* Draw the image */
+    drawImgStatic(rend, img, dest.x, dest.y, dest.w, dest.h, NULL);
 }
 
 /* Draw a rectangle */
@@ -659,22 +732,9 @@ void drawFilledRect(SDL_Renderer *rend, int pos_x, int pos_y, int width, int hei
 }
 
 void drawRectDynamic(SDL_Renderer *rend, int pos_x, int pos_y, int width, int height, int red, int green, int blue, int alpha) {
-    SDL_SetRenderDrawColor(rend, red, green, blue, alpha);
-    SDL_Rect rect = {(pos_x-CAM_POS_X)*CAM_SCALE, (pos_y-CAM_POS_Y)*CAM_SCALE, width, height};
-    SDL_RenderDrawRect(rend, &rect);
-}
-
-void tileRectStatic(int tile_x, int tile_y, SDL_Rect *rect,int wind_width,int wind_height) {
-    rect->x = (tile_x * TILE_WIDTH)+ wind_width / 2;
-	rect->y = (tile_y * TILE_HEIGHT)+ wind_height / 2;
-	rect->w = TILE_WIDTH;
-	rect->h = TILE_HEIGHT;
-}
-void tileRectDynamic(int tile_x, int tile_y, SDL_Rect *rect,int wind_width,int wind_height) {
-    	rect->x = (tile_x * TILE_WIDTH - CAM_POS_X) * CAM_SCALE + wind_width / 2;
-	rect->y = (tile_y * TILE_HEIGHT - CAM_POS_Y) * CAM_SCALE + wind_height / 2;
-	rect->w = TILE_WIDTH * CAM_SCALE;
-	rect->h = TILE_HEIGHT * CAM_SCALE;
+    SDL_Rect rect = {pos_x, pos_y, width, height};
+    staticToDynamic(&rect);
+    drawRect(rend, rect.x, rect.y, rect.w, rect.h, red, green, blue, alpha);
 }
 
 
@@ -708,26 +768,25 @@ int main(int argc, char* argv[]) {
     /* Antialiasing */
     SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "1");
 
-    // [DEBBUG]
+    // [TEMPORARY]
     Wave **waves; int nb_waves;
     loadLevel("level_test", &waves, &nb_waves);
+    Tower *tower_list=NULL;
 
     /* Load images */
     SDL_Surface *archer_1=loadImg("menu/archer_menu");
-    SDL_Surface *Towers[]={loadImg("Tower/archer_Tower_1")};
+    SDL_Surface *towers[]={loadImg("towers/Archer_tower")};
     SDL_Surface *grass_tiles[] = {loadImg("others/grass_tile_a"), loadImg("others/grass_tile_b"), loadImg("others/grass_tile_c"), loadImg("others/grass_tile_d")};
-    /* Main loop */
 
+    /* Main loop */
+    Tower *tower;  bool is_tile_empty;
     int cam_x_speed = 0, cam_y_speed = 0, cam_speed_mult = 0;
+    int *selected_tile_pos = malloc(2 * sizeof(int)); selected_tile_pos[0] = 0; selected_tile_pos[1] = 0;
     bool menu_hidden = true;
     bool mouse_dragging = false;
     bool fullscreen = FULLSCREEN;
     SDL_Event event;
     bool running = true;
-    
-	Tower *tower_list=NULL;
-    
-    SDL_Rect tiles_list[NB_COLLUMNS*NB_ROWS];
     while (running) {
         /* Process events */
         while (SDL_PollEvent(&event)) {
@@ -811,39 +870,44 @@ int main(int argc, char* argv[]) {
                 /* Mouse button pressed */
                 case SDL_MOUSEBUTTONDOWN:
                     switch (event.button.button) {
+                        /* Click and drag for camera movement */
                         case SDL_BUTTON_RIGHT:
                             mouse_dragging = true;
                             break;
+                        /* Tower placement */
                         case SDL_BUTTON_LEFT:
-                        	int tile_choosed=(NB_COLLUMNS*NB_ROWS)+1; //impossible tile
-                        	bool turret_placed_on_tile = false;
-                        	if (event.motion.x>tiles_list[0].x && event.motion.x<(tiles_list[sizeof(tiles_list)/sizeof(tiles_list[0])].x+TILE_WIDTH) && event.motion.y>tiles_list[0].y && event.motion.y<(tiles_list[sizeof(tiles_list)].y+TILE_HEIGHT)){ //cursor is on the tiles
-                        		for (long unsigned int i=0;i<(sizeof(tiles_list)/sizeof(tiles_list[0]));i++){
-                        			if (event.motion.x>tiles_list[i].x && event.motion.x<(tiles_list[i].x+TILE_WIDTH) && event.motion.y>tiles_list[i].y && event.motion.y<(tiles_list[i].y+TILE_HEIGHT)){
-                        				//cursor is on that tile
-                        				drawRectDynamic(rend,tiles_list[i].x,tiles_list[i].y,TILE_WIDTH,TILE_HEIGHT,255,255,255,255);
-                        				//we put the tile in white
-                        				tile_choosed = i;
-                        			}
-                        		menu_hidden = false;
-                        		}
-                        	}
-                        	if (!menu_hidden){
-                        		if ( tile_choosed < (NB_COLLUMNS*NB_ROWS)){
-                        			div_t col_row = div(tile_choosed,NB_COLLUMNS); // function of stdlib that gives the remainder and the quotient of his argument so the quotient is the row and the remainder the col of the tile
-                        			while ( tower_list->next != NULL){ //verify if there's already a turret on the tile
-                        				if (tower_list->row == col_row.quot && tower_list->collumn == col_row.rem){
-                        					turret_placed_on_tile=true;
-                        				}
-                        			}
-                        			if (!turret_placed_on_tile){
-                        				if (event.motion.x > 0 && event.motion.x < SPRITE_SIZE/2 && event.motion.y >0 && event.motion.y < SPRITE_SIZE/2){
-                        					AddTower(&tower_list,'A',col_row.quot,col_row.rem);
-                        				}	
-                        			}
-				        		}
-				        		menu_hidden=true;
-                        	}
+                            /* If tile selected */
+                            if (event.button.y > WINDOW_HEIGHT/4 || menu_hidden) {
+                                selected_tile_pos[0] = event.button.x;
+                                selected_tile_pos[1] = event.button.y;
+                                pixelToTile(&selected_tile_pos[0], &selected_tile_pos[1]);
+                                if (1 <= selected_tile_pos[0] && selected_tile_pos[0] <= NB_COLLUMNS && 1 <= selected_tile_pos[1] && selected_tile_pos[1] <= NB_ROWS) {
+                                    menu_hidden = false;
+                                }
+                                else {
+                                    selected_tile_pos[0] = 0; selected_tile_pos[1] = 0;
+                                    menu_hidden = true;
+                                }
+                            }
+                            /* If menu selected */
+                            else {
+                                /* Check is selected tile is empty */
+                                is_tile_empty = true;
+                                tower = tower_list;
+                                while (tower) {
+                                    if (tower->collumn == selected_tile_pos[0] && tower->row == selected_tile_pos[1]) {
+                                        is_tile_empty = false;
+                                        break;
+                                    }
+                                    tower = tower->next;
+                                }
+                                /* Place tower */
+                                if (is_tile_empty) {
+                                    if (0 <= event.motion.x && event.motion.x <= SPRITE_SIZE/2 && 0 <= event.motion.y && event.motion.y <= SPRITE_SIZE/2) {
+                                        addTower(&tower_list, 'A', selected_tile_pos[1], selected_tile_pos[0]);
+                                    }
+                                }
+                            }
                             break;
                         default:
                             break;
@@ -871,13 +935,13 @@ int main(int argc, char* argv[]) {
                         CAM_POS_X -= event.motion.xrel / CAM_SCALE;
                         CAM_POS_Y -= event.motion.yrel / CAM_SCALE;
                     }
-                    printf("%d / %d\n",event.motion.x,event.motion.y); // mouse position debug 
                     break;
                 default:
                     break;
             }
         
         }
+
         /* Clear screen */
         SDL_SetRenderDrawColor(rend, 0, 0, 0, 255);
         SDL_RenderClear(rend);
@@ -890,32 +954,24 @@ int main(int argc, char* argv[]) {
                 drawImgDynamic(rend, grass_tiles[x%2 + (y%2) * 2], TILE_WIDTH * x, TILE_HEIGHT * y, SPRITE_SIZE, SPRITE_SIZE, NULL);
             }
         }
-        
-        
-	for (int y = 0; y < NB_ROWS; y++) {
-	    for (int x = 0; x < NB_COLLUMNS; x++) {
-	        tileRectDynamic(x,y,&(tiles_list[x+y]),WINDOW_WIDTH,WINDOW_HEIGHT);
-	        
-	    }
-	}
         drawEnemies(rend, waves[0]->enemies);
         drawTower(rend,tower_list);
         /* Draw the Menu if necessary */
-        if (menu_hidden==false){
-            drawFilledRect(rend,0,0,WINDOW_WIDTH,WINDOW_HEIGHT/4,128,128,128,255);
-            drawRect(rend,0,0,WINDOW_WIDTH,WINDOW_HEIGHT/4,255,255,255,255);
-            drawImgStatic(rend,archer_1,-WINDOW_WIDTH/2,-WINDOW_HEIGHT/2,SPRITE_SIZE/2,SPRITE_SIZE/2,NULL);
+        if (!menu_hidden){
+            drawFilledRect(rend, 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT/4, 128, 128, 128, 255);
+            drawRect(rend, 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT/4, 255, 255, 255, 255);
+            drawImgStatic(rend, towers[0], 0, 0, SPRITE_SIZE/2, SPRITE_SIZE/2, NULL);
         }
         /* Draw to window and loop */
         SDL_RenderPresent(rend);
         SDL_Delay(max(1000/FPS - (SDL_GetTicks64()-CURRENT_TICK), 0));
         CURRENT_TICK = SDL_GetTicks64();
-        
     }
     
     /* Free allocated memory */
     delImg(archer_1);
     delImg(grass_tiles[3]); delImg(grass_tiles[2]); delImg(grass_tiles[1]); delImg(grass_tiles[0]);
+    free(selected_tile_pos);
     /* Release resources */
     SDL_DestroyRenderer(rend);
     SDL_DestroyWindow(wind);
