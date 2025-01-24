@@ -78,7 +78,15 @@ typedef struct {
     int turn_nb;        // Turn number
 } Game;
 
-
+typedef struct projectile{
+	int row; // coordinates of the projectile
+	int collumn;
+	SDL_Surface *sprite;
+	int damage; // damage based on the type of turret
+	Tower *tower; // tower linked to the projectile
+	struct projectile* next;
+	Animation *anim;
+} Projectile;
 
 
 /* Header */
@@ -124,10 +132,12 @@ void drawImgDynamic(SDL_Renderer *rend, SDL_Surface *img, int pos_x, int pos_y, 
 void drawRect(SDL_Renderer *rend, int pos_x, int pos_y, int width, int height, int red, int green, int blue, int alpha);
 void drawFilledRect(SDL_Renderer *rend, int pos_x, int pos_y, int width, int height, int red, int green, int blue, int alpha);
 void drawTower(SDL_Renderer *rend, Tower *Tower_list);
-bool addTower(Tower **Tower_list,char Tower_type,int placement_row,int placement_collumn);
+bool addTower(Tower **Tower_list,char Tower_type,int placement_row,int placement_collumn,int *funds);
 void tileRectDynamic(int tile_x, int tile_y, SDL_Rect *rect,int wind_width,int wind_height);
 void tileRectStatic(int tile_x, int tile_y, SDL_Rect *rect,int wind_width,int wind_height);
-
+void ShootProjectile(Tower *tower,Projectile **Projectile_list);
+void updateProjectile(Projectile *Projectile_list);
+void drawProjectiles(SDL_Renderer *rend, Tower *Projectile_list);
 
 
 
@@ -590,7 +600,7 @@ bool loadLevel(const char *path, Wave ***waves, int *nb_waves) {
 }
 
 //Same function as AddEnemy but for the Tower
-bool addTower(Tower **tower_list, char tower_type, int placement_row, int placement_collumn) {
+bool addTower(Tower **tower_list, char tower_type, int placement_row, int placement_collumn,int *funds) {
     /* Invalid position */
     if (1 > placement_row || placement_row > NB_ROWS || 1 > placement_collumn || placement_collumn > NB_COLLUMNS) {
         printf("[ERROR]    Invalid position for tower (x=%d, y=%d)", placement_collumn, placement_row);
@@ -617,6 +627,12 @@ bool addTower(Tower **tower_list, char tower_type, int placement_row, int placem
             free(new_tower);
             return false;
     }
+    if (*funds<new_tower->cost){
+    	return false;
+    }
+    else{
+    	*funds-=new_tower->cost;
+    }
     if (!(*tower_list)) {
         *tower_list = new_tower;
         return true;
@@ -642,8 +658,62 @@ void drawTower(SDL_Renderer *rend, Tower *tower_list) {
     }
 }
 
+/* Destroy an tower and free its allocated memory */
+void destroyTower(Tower *tower, Tower **tower_list) {
+	if (!tower ||!tower_list) return;
+    /* Destroy tower data */
+    if (tower->sprite) SDL_FreeSurface(tower->sprite);
+    if (tower->anim) destroyAnim(tower->anim);
+    /* Change pointers of tower accordingly */
+    if (*tower_list == tower) {
+        *tower_list = tower->next;
+        return;
+    }
+    while (*tower_list && (*tower_list)->next != tower)*tower_list = (*tower_list)->next; 
+    if (tower_list) (*tower_list)->next = tower->next;
+	free(tower);
+}
+
+void ShootProjectile(Tower *tower,Projectile **Projectile_list){
+	Projectile *new_projectile = malloc(sizeof(Projectile));
+	new_projectile->row = tower->row;
+	new_projectile->collumn = tower->collumn;
+	new_projectile->tower = tower;
+	new_projectile->anim = newAnim();
+	switch ( tower->type){
+		case 'A':
+			new_projectile->sprite = SDL_LoadBMP("projectile/arrow");
+			break;
+		default :
+			new_projectile->sprite = SDL_LoadBMP("projectile/white_line");
+			break;
+	}
+	if (!(*Projectile_list)) {
+        	*Projectile_list = new_projectile;
+        	return;
+    	}
+	Projectile *current = *Projectile_list; 
+    while (current->next != NULL) current = current->next;
+    current->next = new_projectile; 
+    return;
+	
+}
+
+void updateProjectile(Projectile *Projectile_list){
+	while(Projectile_list){
+		Projectile_list->row = Projectile_list->row + 1; //we move forward the projectile
+		Projectile_list=Projectile_list->next;
+	}
+}
 
 
+
+void drawProjectiles(SDL_Renderer *rend, Tower *Projectile_list) {
+    while (Projectile_list) {
+        drawImgDynamic(rend, Projectile_list->sprite, TILE_WIDTH * (Projectile_list->collumn - 1), TILE_HEIGHT * (Projectile_list->row - 1), SPRITE_SIZE, SPRITE_SIZE,Projectile_list->anim);
+        Projectile_list = Projectile_list->next;
+    }
+}
 
 /* Convert a rect from a dynamic position (dependant of the camera position) to a static position (constant) */
 void dynamicToStatic(SDL_Rect *rect) {
@@ -772,9 +842,8 @@ int main(int argc, char* argv[]) {
     Wave **waves; int nb_waves;
     loadLevel("level_test", &waves, &nb_waves);
     Tower *tower_list=NULL;
-
+	
     /* Load images */
-    SDL_Surface *archer_1=loadImg("menu/archer_menu");
     SDL_Surface *towers[]={loadImg("towers/Archer_tower")};
     SDL_Surface *grass_tiles[] = {loadImg("others/grass_tile_a"), loadImg("others/grass_tile_b"), loadImg("others/grass_tile_c"), loadImg("others/grass_tile_d")};
 
@@ -787,6 +856,10 @@ int main(int argc, char* argv[]) {
     bool fullscreen = FULLSCREEN;
     SDL_Event event;
     bool running = true;
+    
+    int nb_turns=0,funds=0;
+    funds+=waves[0]->income;
+    
     while (running) {
         /* Process events */
         while (SDL_PollEvent(&event)) {
@@ -903,10 +976,11 @@ int main(int argc, char* argv[]) {
                                 }
                                 /* Place tower */
                                 if (is_tile_empty) {
-                                    if (0 <= event.motion.x && event.motion.x <= SPRITE_SIZE/2 && 0 <= event.motion.y && event.motion.y <= SPRITE_SIZE/2) {
-                                        addTower(&tower_list, 'A', selected_tile_pos[1], selected_tile_pos[0]);
-                                    }
+		                                if (0 <= event.motion.x && event.motion.x <= SPRITE_SIZE/2 && 0 <= event.motion.y && event.motion.y <= SPRITE_SIZE/2) {
+		                                    addTower(&tower_list, 'A', selected_tile_pos[1], selected_tile_pos[0],&funds);
+		                            	}
                                 }
+                                menu_hidden=true;
                             }
                             break;
                         default:
@@ -969,7 +1043,7 @@ int main(int argc, char* argv[]) {
     }
     
     /* Free allocated memory */
-    delImg(archer_1);
+    
     delImg(grass_tiles[3]); delImg(grass_tiles[2]); delImg(grass_tiles[1]); delImg(grass_tiles[0]);
     free(selected_tile_pos);
     /* Release resources */
