@@ -81,6 +81,15 @@ typedef struct enemy {
     Animation *anim;            // Animation of the enemy
 } Enemy;
 
+/* Projectile shoot by a tower */
+typedef struct projectile {
+    Tower *origin;            // Tower that shot the projectile
+    Enemy *target;            // Enemy target of the projectile
+    struct projectile* next;  // Nextprojectile (in order of apparition)
+    SDL_Surface *sprite;      // Sprite of the projectile
+    Animation *anim;          // Animation of the projectile
+} Projectile;
+
 /* Waves */
 typedef struct {
     Enemy *enemies;  // Enemies of the wave
@@ -89,29 +98,13 @@ typedef struct {
 
 /* Game structure, composed of multiple waves */
 typedef struct {
-    Tower *tower;     // Tower
-    Enemy *enemies;     // Enemies
-    int funds;          // Availible funds to build tower
-    int turn_nb;        // Turn number
+    Tower *tower;    // Tower
+    Enemy *enemies;  // Enemies
+    int funds;       // Availible funds to build tower
+    int turn_nb;     // Turn number
 } Game;
 
-typedef struct projectile {
-    Tower *origin;  // Tower that shot the projectile
-    Enemy *target;  // Enemy target of the projectile
-    struct projectile* next;
-    SDL_Surface *sprite;
-    Animation *anim;
-} Projectile;
 
-// typedef struct projectile {
-//     int row; // coordinates of the projectile
-//     int collumn;
-//     SDL_Surface *sprite;
-//     int damage; // damage based on the type of turret
-//     Tower *tower; // tower linked to the projectile
-//     struct projectile* next;
-//     Animation *anim;
-// } Projectile;
 
 
 /* Header */
