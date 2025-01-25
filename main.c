@@ -131,10 +131,10 @@ void drawImgStatic(SDL_Renderer *rend, SDL_Surface *img, int pos_x, int pos_y, i
 void drawImgDynamic(SDL_Renderer *rend, SDL_Surface *img, int pos_x, int pos_y, int width, int height, Animation *anim);
 void drawRect(SDL_Renderer *rend, int pos_x, int pos_y, int width, int height, int red, int green, int blue, int alpha);
 void drawFilledRect(SDL_Renderer *rend, int pos_x, int pos_y, int width, int height, int red, int green, int blue, int alpha);
-bool addTower(Tower **Tower_list,char Tower_type,int placement_row,int placement_collumn,int *funds);
+bool addTower(Tower **Tower_list,char Tower_type,int placement_row,int placement_collumn,int *funds,Tower **current_tower);
 void ShootProjectile(Tower *tower,Projectile **Projectile_list);
 void updateProjectile(Projectile *Projectile_list);
-void drawProjectiles(SDL_Renderer *rend, Tower *Projectile_list);
+void drawProjectiles(SDL_Renderer *rend, Projectile *Projectile_list);
 
 
 
@@ -618,7 +618,7 @@ bool loadLevel(const char *path, Wave ***waves, int *nb_waves) {
 }
 
 //Same function as AddEnemy but for the Tower
-bool addTower(Tower **tower_list, char tower_type, int placement_row, int placement_collumn,int *funds) {
+bool addTower(Tower **tower_list, char tower_type, int placement_row, int placement_collumn,int *funds,Tower **current_tower) {
     /* Invalid position */
     if (1 > placement_row || placement_row > NB_ROWS || 1 > placement_collumn || placement_collumn > NB_COLLUMNS) {
         printf("[ERROR]    Invalid position for tower (x=%d, y=%d)", placement_collumn, placement_row);
@@ -666,6 +666,7 @@ bool addTower(Tower **tower_list, char tower_type, int placement_row, int placem
         current = current->next;
     }
     current->next = new_tower; // add the new Tower as the next Tower
+    *current_tower = new_tower; // we keep the tower being placed to create the projectile
     return true;
 }
 
@@ -687,8 +688,8 @@ void destroyTower(Tower *tower, Tower **tower_list) {
 
 void ShootProjectile(Tower *tower,Projectile **Projectile_list){
     Projectile *new_projectile = malloc(sizeof(Projectile));
-    new_projectile->row = tower->row;
-    new_projectile->collumn = tower->collumn;
+    new_projectile->row = tower->row+1;
+    new_projectile->collumn = tower->collumn+1; // projectile spawn one tile ahead of the turret
     new_projectile->tower = tower;
     new_projectile->anim = newAnim();
     switch ( tower->type){
@@ -717,14 +718,12 @@ void updateProjectile(Projectile *Projectile_list){
     }
 }
 
-void drawProjectiles(SDL_Renderer *rend, Tower *Projectile_list) {
+void drawProjectiles(SDL_Renderer *rend, Projectile *Projectile_list) {
     while (Projectile_list) {
         drawImgDynamic(rend, Projectile_list->sprite, TILE_WIDTH * (Projectile_list->collumn - 1), TILE_HEIGHT * (Projectile_list->row - 1), SPRITE_SIZE, SPRITE_SIZE,Projectile_list->anim);
         Projectile_list = Projectile_list->next;
     }
 }
-
-
 
 
 /* Draw on screen enemies and towers, from top to bottom */
@@ -887,13 +886,13 @@ int main(int argc, char* argv[]) {
     Wave **waves; int nb_waves;
     loadLevel("level_test", &waves, &nb_waves);
     Tower *tower_list=NULL;
-
+	Projectile *Projectile_list=NULL;
     /* Load images */
     SDL_Surface *towers[]={loadImg("towers/Archer_tower")};
     SDL_Surface *grass_tiles[] = {loadImg("others/grass_tile_a"), loadImg("others/grass_tile_b"), loadImg("others/grass_tile_c"), loadImg("others/grass_tile_d")};
 
     /* Main loop */
-    Tower *tower;  bool is_tile_empty;
+    Tower *tower;  bool is_tile_empty; Tower *current_tower=NULL;
     int cam_x_speed = 0, cam_y_speed = 0, cam_speed_mult = 0;
     int *selected_tile_pos = malloc(2 * sizeof(int)); selected_tile_pos[0] = 0; selected_tile_pos[1] = 0;
     bool menu_hidden = true;
@@ -954,6 +953,7 @@ int main(int argc, char* argv[]) {
                         /* [TEMPORARY] Play 1 turn */
                         case SDL_SCANCODE_SPACE:
                             updateEnemies(waves[0]->enemies, tower_list);
+                            updateProjectile(Projectile_list);
                             break;
                         default:
                             break;
@@ -1022,7 +1022,8 @@ int main(int argc, char* argv[]) {
                                 /* Place tower */
                                 if (is_tile_empty) {
                                         if (0 <= event.motion.x && event.motion.x <= SPRITE_SIZE/2 && 0 <= event.motion.y && event.motion.y <= SPRITE_SIZE/2) {
-                                            addTower(&tower_list, 'A', selected_tile_pos[1], selected_tile_pos[0],&funds);
+                                            addTower(&tower_list, 'A', selected_tile_pos[1], selected_tile_pos[0],&funds,&current_tower);
+                                            ShootProjectile(current_tower,&Projectile_list);
                                         }
                                 }
                                 menu_hidden=true;
@@ -1072,6 +1073,7 @@ int main(int argc, char* argv[]) {
                 drawImgDynamic(rend, grass_tiles[x%2 + (y%2) * 2], TILE_WIDTH * x, TILE_HEIGHT * y, SPRITE_SIZE, SPRITE_SIZE, NULL);
         }
         drawEnemiesAndTowers(rend, waves[0]->enemies, tower_list);
+        drawProjectiles(rend,Projectile_list);
         /* Draw the Menu if necessary */
         if (!menu_hidden){
             drawFilledRect(rend, 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT/4, 128, 128, 128, 255);
