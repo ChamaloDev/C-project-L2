@@ -85,7 +85,7 @@ typedef struct enemy {
 typedef struct projectile {
     Tower *origin;            // Tower that shot the projectile
     Enemy *target;            // Enemy target of the projectile
-    struct projectile* next;  // Nextprojectile (in order of apparition)
+    struct projectile* next;  // Next projectile (in order of apparition)
     SDL_Surface *sprite;      // Sprite of the projectile
     Animation *anim;          // Animation of the projectile
 } Projectile;
@@ -296,7 +296,7 @@ void setAnimMove(Animation *anim, int dx, int dy) {
 void setAnimProjectile(Animation *anim, int x1, int y1, int x2, int y2, double speed) {
     int *data = malloc(4 * sizeof(int));
     data[0] = x1; data[1] = y1; data[2] = x2; data[3] = y2;
-    setAnim(anim, 'P', (int) ((abs(x1-x2) + abs(y1-y2))*1000.0 / speed), data);
+    setAnim(anim, 'P', ((abs(x1-x2) + abs(y1-y2))*1000.0 / speed), data);
 }
 
 /* Apply an animation (affect the destination rect of a texture) */
@@ -453,7 +453,7 @@ void destroyEnemy(Enemy *enemy, Enemy **enemy_list) {
         if (enemy->next_on_row) enemy->next_on_row->prev_on_row = enemy->prev_on_row;
     }
     /* Destroy enemy data */
-    if (enemy->sprite) SDL_FreeSurface(enemy->sprite);
+    if (enemy->sprite) delImg(enemy->sprite);
     if (enemy->anim) destroyAnim(enemy->anim);
     free(enemy);
 }
@@ -639,7 +639,7 @@ void destroyTower(Tower *tower, Tower **tower_list) {
         if (prev_tower) prev_tower->next = tower->next;
     }
     /* Destroy tower data */
-    if (tower->sprite) SDL_FreeSurface(tower->sprite);
+    if (tower->sprite) delImg(tower->sprite);
     if (tower->anim) destroyAnim(tower->anim);
     free(tower);
 }
@@ -735,7 +735,7 @@ void destroyProjectile(Projectile *projectile, Projectile **projectile_list) {
         if (prev_projectile) prev_projectile->next = projectile->next;
     }
     /* Destroy tower data */
-    if (projectile->sprite) SDL_FreeSurface(projectile->sprite);
+    if (projectile->sprite) delImg(projectile->sprite);
     if (projectile->anim) destroyAnim(projectile->anim);
     free(projectile);
 }
@@ -1034,7 +1034,7 @@ int main(int argc, char* argv[]) {
     loadLevel("level_test", &waves, &nb_waves);
     Enemy *enemy_list = waves[0]->enemies; Tower *tower_list = NULL; Projectile *projectile_list = NULL;
     /* Load images */
-    SDL_Surface *towers[]={loadImg("towers/Archer_tower")};
+    SDL_Surface *towers[] = {loadImg("towers/Archer_tower")};
     SDL_Surface *grass_tiles[] = {loadImg("others/grass_tile_a"), loadImg("others/grass_tile_b"), loadImg("others/grass_tile_c"), loadImg("others/grass_tile_d")};
 
     /* Main loop */
