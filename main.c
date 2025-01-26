@@ -23,6 +23,13 @@
 #define GOBLIN_ENEMY 'g'
 /* Tower types */
 #define ARCHER_TOWER 'A'
+/* Animation type */
+#define IDLE_ANIMATION 'I'
+#define HURT_ANIMATION 'H'
+#define DEAD_ANIMATION 'D'
+#define ATTACK_ANIMATION 'A'
+#define MOVE_ANIMATION 'M'
+#define PROJECTILE_ANIMATION 'P'
 
 
 
@@ -127,6 +134,7 @@ void setAnimHurt(Animation *anim);
 void setAnimDead(Animation *anim);
 void setAnimAttack(Animation *anim, int side);
 void setAnimMove(Animation *anim, int dx, int dy);
+void setAnimProjectile(Animation *anim, int x1, int y1, int x2, int y2, double speed);
 bool applyAnim(Animation *anim, SDL_Rect *rect);
 bool getEnemyAndTowerAt(Enemy *enemy_list, Tower *tower_list, int collumn, int row, Enemy **enemy, Tower **tower);
 bool addEnemy(Enemy **enemy_list, char enemy_type, int spawn_row, int spawn_collumn);
@@ -265,38 +273,38 @@ void setAnim(Animation *anim, char type, Uint64 length, int *data) {
 void setAnimIdle(Animation *anim) {
     int *data = malloc(1 * sizeof(int));
     data[0] = randrange(40, 100);
-    setAnim(anim, 'I', -1, data);
+    setAnim(anim, IDLE_ANIMATION, -1, data);
 }
 
 /* Set animation to hurt */
 void setAnimHurt(Animation *anim) {
-    setAnim(anim, 'H', 1000, NULL);
+    setAnim(anim, HURT_ANIMATION, 1000, NULL);
 }
 
 /* Set animation to dead */
 void setAnimDead(Animation *anim) {
-    setAnim(anim, 'D', 1000, NULL);
+    setAnim(anim, DEAD_ANIMATION, 1000, NULL);
 }
 
 /* Set animation to attack */
 void setAnimAttack(Animation *anim, int side) {
     int *data = malloc(1 * sizeof(int));
     data[0] = side;
-    setAnim(anim, 'A', 1000, data);
+    setAnim(anim, ATTACK_ANIMATION, 1000, data);
 }
 
 /* Set animation to move (dx dy) tiles */
 void setAnimMove(Animation *anim, int dx, int dy) {
     int *data = malloc(2 * sizeof(int));
     data[0] = dx; data[1] = dy;
-    setAnim(anim, 'M', 3000, data);
+    setAnim(anim, MOVE_ANIMATION, 3000, data);
 }
 
 /* Set animation to projectile, goes from tile (x1 y1) to tile (x2 y2) at speed tile per second */
 void setAnimProjectile(Animation *anim, int x1, int y1, int x2, int y2, double speed) {
     int *data = malloc(4 * sizeof(int));
     data[0] = x1; data[1] = y1; data[2] = x2; data[3] = y2;
-    setAnim(anim, 'P', ((abs(x1-x2) + abs(y1-y2))*1000.0 / speed), data);
+    setAnim(anim, PROJECTILE_ANIMATION, ((abs(x1-x2) + abs(y1-y2))*1000.0 / speed), data);
 }
 
 /* Apply an animation (affect the destination rect of a texture) */
@@ -306,7 +314,7 @@ bool applyAnim(Animation *anim, SDL_Rect *rect) {
     double var_a, var_b;
     switch (anim->type) {
         /* Idle animation, (shrink up and down periodically) */
-        case 'I':
+        case IDLE_ANIMATION:
             var_a = 1.0 - periodicFunction((CURRENT_TICK - anim->start_tick) / (anim->data[0]/10.0)) / 20.0 + 1.0/40.0;
             var_b = 1.0 + periodicFunction((CURRENT_TICK - anim->start_tick) / (anim->data[0]/10.0)) / 10.0 - 1.0/20.0;
             rect->x -= rect->w * (var_a-1.0) / 2.0;
@@ -315,18 +323,19 @@ bool applyAnim(Animation *anim, SDL_Rect *rect) {
             rect->h *= var_b;
             break;
         /* Movement animation, (go to destination by doing small jumps) */
-        case 'M':
+        case MOVE_ANIMATION:
             var_a = (CURRENT_TICK - anim->start_tick) / (double) anim->length;
             var_b = periodicFunction((CURRENT_TICK - anim->start_tick) * 3.0) / 20.0;
             rect->x -= anim->data[0] * (1.0-var_a) * TILE_WIDTH;
             rect->y -= anim->data[1] * (1.0-var_a) * TILE_HEIGHT + var_b * TILE_HEIGHT;
             break;
         /* Projectile animation, (go to point a to point b) */
-        case 'P':
+        case PROJECTILE_ANIMATION:
             var_a = (CURRENT_TICK - anim->start_tick) / (double) anim->length;
             rect->x = ((anim->data[0]-1) * (1.0-var_a) + (anim->data[2]-1) * var_a) * TILE_WIDTH;
             rect->y = ((anim->data[1]-1) * (1.0-var_a) + (anim->data[3]-1) * var_a) * TILE_HEIGHT;
             break;
+        /* Unknown animation type */
         default:
             printf("[ERROR]    Undefined animation type '%c'\n", anim->type);
             setAnimIdle(anim);
@@ -742,7 +751,7 @@ void destroyProjectile(Projectile *projectile, Projectile **projectile_list) {
 
 /* Return if the projectile has visualy reached it's target */
 bool hasProjectileReachedTarget(Projectile *projectile) {
-    return (!projectile || !projectile->anim || projectile->anim->type != 'P');
+    return (!projectile || !projectile->anim || projectile->anim->type != PROJECTILE_ANIMATION);
 }
 
 /* Update all projectiles */
@@ -1196,6 +1205,9 @@ int main(int argc, char* argv[]) {
         
         }
 
+        /* Update entities */
+        updateProjectiles(&projectile_list);
+
         /* Clear screen */
         SDL_SetRenderDrawColor(rend, 0, 0, 0, 255);
         SDL_RenderClear(rend);
@@ -1208,7 +1220,6 @@ int main(int argc, char* argv[]) {
         }
         drawEnemiesAndTowers(rend, enemy_list, tower_list);
         drawProjectiles(rend, projectile_list);
-        // drawProjectiles(rend, projectile_list);
         /* Draw the Menu if necessary */
         if (!menu_hidden){
             drawFilledRect(rend, 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT/4, 128, 128, 128, 255);
