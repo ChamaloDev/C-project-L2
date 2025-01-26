@@ -144,6 +144,7 @@ Enemy **getEnemyInCollumn(Enemy *enemy_list, int collumn_nb);
 Enemy *getFirstEnemyInRow(Enemy *enemy_list, int row);
 int moveEnemy(Enemy *enemy, Enemy *enemy_list, Tower *tower_list, int delta, char axis);
 void updateEnemies(Enemy *enemy_list, Tower *tower_list);
+void damageEnemy(Enemy *enemy, int amount, Enemy **enemy_list);
 Tower *addTower(Tower **tower_list, Enemy *enemy_list, char tower_type, int placement_row, int placement_collumn);
 Tower *buyTower(Tower **tower_list, Enemy *enemy_list, char tower_type, int placement_row, int placement_collumn, int *funds);
 void destroyTower(Tower *tower, Tower **tower_list);
@@ -151,7 +152,7 @@ void updateTowers(Tower **tower_list, Enemy *enemy_list, Projectile **projectile
 Projectile *addProjectile(Projectile **projectile_list, Tower *origin, Enemy *target);
 void destroyProjectile(Projectile *projectile, Projectile **projectile_list);
 bool hasProjectileReachedTarget(Projectile *projectile);
-void updateProjectiles(Projectile **projectile_list);
+void updateProjectiles(Projectile **projectile_list, Enemy **enemy_list);
 void drawProjectiles(SDL_Renderer *rend, Projectile *projectile_list);
 bool isWhitespace(char c);
 bool readValue(char **line, char **value);
@@ -262,6 +263,7 @@ void destroyAnim(Animation *anim) {
 
 /* Set the current annimation */
 void setAnim(Animation *anim, char type, Uint64 length, int *data) {
+    if (!anim) return;
     anim->start_tick = CURRENT_TICK;
     anim->type = type;
     anim->length = length;
@@ -313,7 +315,7 @@ bool applyAnim(Animation *anim, SDL_Rect *rect) {
     if (anim->length != (Uint64) -1 && CURRENT_TICK - anim->start_tick >= anim->length) setAnimIdle(anim);
     double var_a, var_b;
     switch (anim->type) {
-        /* Idle animation, (shrink up and down periodically) */
+        /* Idle animation (shrink up and down periodically) */
         case IDLE_ANIMATION:
             var_a = 1.0 - periodicFunction((CURRENT_TICK - anim->start_tick) / (anim->data[0]/10.0)) / 20.0 + 1.0/40.0;
             var_b = 1.0 + periodicFunction((CURRENT_TICK - anim->start_tick) / (anim->data[0]/10.0)) / 10.0 - 1.0/20.0;
@@ -322,14 +324,20 @@ bool applyAnim(Animation *anim, SDL_Rect *rect) {
             rect->w *= var_a;
             rect->h *= var_b;
             break;
-        /* Movement animation, (go to destination by doing small jumps) */
+        /* Hurt animation (shake horizontaly) */
+        case HURT_ANIMATION:
+            var_a = (CURRENT_TICK - anim->start_tick) / (double) anim->length;
+            var_b = periodicFunction(var_a*1000.0 * 6.0) / 20.0 - 1.0/40.0;
+            rect->x -= rect->w * var_b;
+            break;
+        /* Movement animation (go to destination by doing small jumps) */
         case MOVE_ANIMATION:
             var_a = (CURRENT_TICK - anim->start_tick) / (double) anim->length;
             var_b = periodicFunction((CURRENT_TICK - anim->start_tick) * 3.0) / 20.0;
             rect->x -= anim->data[0] * (1.0-var_a) * TILE_WIDTH;
             rect->y -= anim->data[1] * (1.0-var_a) * TILE_HEIGHT + var_b * TILE_HEIGHT;
             break;
-        /* Projectile animation, (go to point a to point b) */
+        /* Projectile animation (go to point a to point b) */
         case PROJECTILE_ANIMATION:
             var_a = (CURRENT_TICK - anim->start_tick) / (double) anim->length;
             rect->x = ((anim->data[0]-1) * (1.0-var_a) + (anim->data[2]-1) * var_a) * TILE_WIDTH;
@@ -571,6 +579,16 @@ void updateEnemies(Enemy *enemy_list, Tower *tower_list) {
     free(first_of_each_row);
 }
 
+/* Damage an enemy */
+void damageEnemy(Enemy *enemy, int amount, Enemy **enemy_list) {
+    if (!enemy || !amount) return;
+    /* Damage enemy */
+    enemy->live_points -= amount;
+    setAnimHurt(enemy->anim);
+    /* Kill enemy if health reaches 0 or less */
+    if (enemy->live_points <= 0) destroyEnemy(enemy, enemy_list);
+}
+
 
 
 
@@ -755,11 +773,21 @@ bool hasProjectileReachedTarget(Projectile *projectile) {
 }
 
 /* Update all projectiles */
-void updateProjectiles(Projectile **projectile_list) {
+void updateProjectiles(Projectile **projectile_list, Enemy **enemy_list) {
     Projectile *projectile = *projectile_list; Projectile *tmp;
     while (projectile) {
         /* On target reached */
         if (hasProjectileReachedTarget(projectile)) {
+            /* Apply projectile effects */
+            switch (projectile->origin->type) {
+                case ARCHER_TOWER:
+                    damageEnemy(projectile->target, 2, enemy_list);
+                    break;
+                default:  /* Invalid tower type */
+                    printf("[ERROR]    Unknown tower type '%c'\n", projectile->origin->type);
+                    break;
+            }
+            /* Delete projectile */
             tmp = projectile->next;
             destroyProjectile(projectile, projectile_list);
             projectile = tmp;
@@ -1206,7 +1234,7 @@ int main(int argc, char* argv[]) {
         }
 
         /* Update entities */
-        updateProjectiles(&projectile_list);
+        updateProjectiles(&projectile_list, &enemy_list);
 
         /* Clear screen */
         SDL_SetRenderDrawColor(rend, 0, 0, 0, 255);
