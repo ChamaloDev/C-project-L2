@@ -21,6 +21,7 @@
 #define SLIME_ENEMY 'S'
 #define GELLY_ENEMY 'G'
 #define GOBLIN_ENEMY 'g'
+#define ORC_ENEMY 'O'
 /* Tower types */
 #define ARCHER_TOWER 'A'
 /* Animation type */
@@ -413,6 +414,11 @@ bool addEnemy(Enemy **enemy_list, char enemy_type, int spawn_row, int spawn_coll
             new_enemy->live_points = 6;
             new_enemy->base_speed = 5;
             new_enemy->sprite = loadImg("enemies/Goblin");
+            break;
+        case ORC_ENEMY:
+            new_enemy->live_points = 15;
+            new_enemy->base_speed = 1;
+            new_enemy->sprite = loadImg("enemies/Orc");
             break;
         default:  /* Unknown enemy type */
             printf("[ERROR]    Unknown enemy type '%c'\n", enemy_type);
