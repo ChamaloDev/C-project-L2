@@ -105,7 +105,7 @@ typedef struct {
 
 /* Game structure, composed of multiple waves */
 typedef struct {
-    Tower *tower;    // Tower
+    Tower *towers;   // Tower
     Enemy *enemies;  // Enemies
     int funds;       // Availible funds to build tower
     int turn_nb;     // Turn number
