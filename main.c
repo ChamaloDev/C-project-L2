@@ -144,6 +144,7 @@ void setAnimMove(Animation *anim, int dx, int dy);
 void setAnimProjectile(Animation *anim, int x1, int y1, int x2, int y2, double speed);
 bool applyAnim(Animation *anim, SDL_Rect *rect);
 bool getEnemyAndTowerAt(Enemy *enemy_list, Tower *tower_list, int collumn, int row, Enemy **enemy, Tower **tower);
+bool isTileEmpty(Enemy *enemy_list, Tower *tower_list, int collumn, int row);
 bool addEnemy(Enemy **enemy_list, char enemy_type, int spawn_row, int spawn_collumn);
 void destroyEnemy(Enemy *enemy, Enemy **enemy_list);
 Enemy **getFirstEnemyOfAllRows(Enemy *enemy_list);
