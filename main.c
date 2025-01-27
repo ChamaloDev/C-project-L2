@@ -885,6 +885,7 @@ bool loadLevel(const char *path, Wave ***waves, int *nb_waves) {
                 if (!(*nb_waves)) {
                     printf("[ERROR]    Invalid syntax for level file \"%s\"\n", full_path);
                     free(full_path);
+                    fclose(file);
                     return false;
                 }
                 addEnemy(&((*waves)[*nb_waves - 1]->enemies), *(values[2]), stringToInt(values[1]), NB_COLLUMNS + stringToInt(values[0]));
@@ -895,12 +896,14 @@ bool loadLevel(const char *path, Wave ***waves, int *nb_waves) {
                 free(full_path);
                 for (int i = 0; i < nb_values; i++) free(values[i]);
                 free(values);
+                fclose(file);
                 return false;
         }
         for (int i = 0; i < nb_values; i++) free(values[i]);
         free(values);
     }
     free(full_path);
+    fclose(file);
     return true;
 }
 
