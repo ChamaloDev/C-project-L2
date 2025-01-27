@@ -24,6 +24,12 @@
 #define ORC_ENEMY 'O'
 /* Tower types */
 #define ARCHER_TOWER 'A'
+#define EMPTY_TOWER 'E'
+#define CANON 'C'
+#define SORCERER_TOWER 'S'
+#define MAGE_TOWER 'M'
+//Mage is the evolution of sorcerer
+
 /* Animation type */
 #define IDLE_ANIMATION 'I'
 #define HURT_ANIMATION 'H'
@@ -700,13 +706,31 @@ Tower *addTower(Tower **tower_list, Enemy *enemy_list, char tower_type, int plac
     new_tower->next = NULL;
     new_tower->anim = newAnim();
     switch (tower_type){
-        case ARCHER_TOWER:
+		case ARCHER_TOWER:
             new_tower->live_points = 8;
             new_tower->cost = 50;
             new_tower->base_attack_cooldown = 1;
             new_tower->sprite = loadImg("towers/Archer_tower");
             break;
-        default:  /* Invalid tower type */
+		case EMPTY_TOWER:
+            new_tower->live_points = 16;
+            new_tower->cost = 25;
+            new_tower->base_attack_cooldown = 1;
+            new_tower->sprite = loadImg("towers/Empty_tower");
+            break;
+		case CANON:
+            new_tower->live_points = 5;
+            new_tower->cost = 30;
+            new_tower->base_attack_cooldown = 2;
+            new_tower->sprite = loadImg("towers/canon");
+            break;
+		case SORCERER_TOWER:
+            new_tower->live_points = 10;
+            new_tower->cost = 80;
+            new_tower->base_attack_cooldown = 1;
+            new_tower->sprite = loadImg("towers/sorcerer");
+            break;
+		default:  /* Invalid tower type */
             printf("[ERROR]    Unknown tower type '%c'\n", tower_type);
             destroyTower(new_tower, tower_list);
             return NULL;
@@ -773,6 +797,21 @@ void towerAct(Tower *tower, Tower **tower_list, Enemy *enemy_list, Projectile **
         tower->attack_cooldown = tower->base_attack_cooldown;
         switch (tower->type) {
             case ARCHER_TOWER:
+                /* Attack the firt enemy on the same row at most 10 tiles away */
+                for (i = 1; i <= 10 && tower->collumn+i <= NB_COLLUMNS; i++) if (getEnemyAndTowerAt(enemy_list, NULL, tower->collumn + i, tower->row, &e, &tmp)) {
+                    addProjectile(projectile_list, tower, e);
+                    break;
+                }
+			case EMPTY_TOWER:
+				break;
+			case CANON:
+                /* Attack the firt enemy on the same row at most 10 tiles away */
+                for (i = 1; i <= 10 && tower->collumn+i <= NB_COLLUMNS; i++) if (getEnemyAndTowerAt(enemy_list, NULL, tower->collumn + i, tower->row, &e, &tmp)) {
+                    addProjectile(projectile_list, tower, e);
+                    break;
+                }
+				break;
+			case SORCERER_TOWER:
                 /* Attack the firt enemy on the same row at most 10 tiles away */
                 for (i = 1; i <= 10 && tower->collumn+i <= NB_COLLUMNS; i++) if (getEnemyAndTowerAt(enemy_list, NULL, tower->collumn + i, tower->row, &e, &tmp)) {
                     addProjectile(projectile_list, tower, e);
@@ -850,6 +889,18 @@ Projectile *addProjectile(Projectile **projectile_list, Tower *origin, Enemy *ta
             new_projectile->sprite = loadImg("projectiles/arrow");
             projectile_speed = 10.0;
             break;
+        case CANON:
+        	new_projectile->sprite = loadImg("projectiles/canon_bullet");
+            projectile_speed = 5.0;
+            break;
+        case SORCERER_TOWER:
+        	new_projectile->sprite = loadImg("projectiles/magic_orb");
+            projectile_speed = 8.0;
+            break;
+        case MAGE_TOWER:
+        	new_projectile->sprite = loadImg("projectiles/magic_orb");
+            projectile_speed = 8.0;
+            break;
         /* Shoot by a tower of unknown type */
         default:
             printf("[ERROR]    Unknown tower type '%c'\n", origin->type);
@@ -905,6 +956,17 @@ void updateProjectiles(Projectile **projectile_list, Enemy **enemy_list) {
                 case ARCHER_TOWER:
                     damageEnemy(projectile->target, 2, enemy_list);
                     break;
+                case EMPTY_TOWER:
+                    break;
+				case CANON:
+					damageEnemy(projectile->target, 1, enemy_list);
+                    break;
+				case SORCERER_TOWER:
+					damageEnemy(projectile->target, 4, enemy_list);
+                    break;
+				case MAGE_TOWER:
+					damageEnemy(projectile->target, 6, enemy_list);
+                    break;               
                 default:  /* Invalid tower type */
                     printf("[ERROR]    Unknown tower type '%c'\n", projectile->origin->type);
                     break;
@@ -1203,9 +1265,10 @@ int main(int argc, char* argv[]) {
     loadLevel("level_test", &waves, &nb_waves);
     Enemy *enemy_list = waves[0]->enemies; Tower *tower_list = NULL; Projectile *projectile_list = NULL;
     /* Load images */
-    SDL_Surface *towers[] = {loadImg("towers/Archer_tower"),loadImg("towers/Empty_tower"),loadImg("towers/canon"),loadImg("towers/sorcerer"),loadImg("towers/sorcerer_evolved")};
+    SDL_Surface *towers[] = {loadImg("towers/Archer_tower"),loadImg("towers/Empty_tower"),loadImg("towers/canon"),loadImg("towers/sorcerer")};
+    SDL_Surface *towers_upgrades[]={loadImg("towers/sorcerer_evolved")};
     SDL_Surface *grass_tiles[] = {loadImg("others/grass_tile_a"), loadImg("others/grass_tile_b"), loadImg("others/grass_tile_c"), loadImg("others/grass_tile_d")};
-
+	SDL_Surface *highlighted_tile = loadImg("others/tile_choosed");
     /* Main loop */
     Enemy *currently_acting_enemy = NULL; Tower *currently_acting_tower = NULL;
     int cam_x_speed = 0, cam_y_speed = 0, cam_speed_mult = 0;
@@ -1323,6 +1386,7 @@ int main(int argc, char* argv[]) {
                                 pixelToTile(&selected_tile_pos[0], &selected_tile_pos[1]);
                                 if (1 <= selected_tile_pos[0] && selected_tile_pos[0] <= NB_COLLUMNS && 1 <= selected_tile_pos[1] && selected_tile_pos[1] <= NB_ROWS) {
                                     menu_hidden = false;
+                                    
                                 }
                                 else {
                                     selected_tile_pos[0] = 0; selected_tile_pos[1] = 0;
@@ -1332,8 +1396,17 @@ int main(int argc, char* argv[]) {
                             /* If menu selected and player clicks on a tower icon, try to buy and place tower (if possible) */
                             else {
                                 /* LVL 1 archer tower */
-                                if (0 <= event.motion.x && event.motion.x <= SPRITE_SIZE/2 && 0 <= event.motion.y && event.motion.y <= SPRITE_SIZE/2) {
+                                if (0 <= event.motion.x && event.motion.x <= SPRITE_SIZE/4 && 0 <= event.motion.y && event.motion.y <= SPRITE_SIZE/2) {
                                     if (buyTower(&tower_list, enemy_list, ARCHER_TOWER, selected_tile_pos[0], selected_tile_pos[1], &funds)) menu_hidden = true;
+                                }
+                                else if (SPRITE_SIZE/2 <= event.motion.x && event.motion.x <= 2*SPRITE_SIZE/2 && 0 <= event.motion.y && event.motion.y <= SPRITE_SIZE/2) {
+                                    if (buyTower(&tower_list, enemy_list, EMPTY_TOWER, selected_tile_pos[0], selected_tile_pos[1], &funds)) menu_hidden = true;
+                                }
+                                else if (2*SPRITE_SIZE/2 <= event.motion.x && event.motion.x <= 3*SPRITE_SIZE/2 && 0 <= event.motion.y && event.motion.y <= SPRITE_SIZE/2) {
+                                    if (buyTower(&tower_list, enemy_list, CANON, selected_tile_pos[0], selected_tile_pos[1], &funds)) menu_hidden = true;
+                                }
+                                else if (3*SPRITE_SIZE/2 <= event.motion.x && event.motion.x <= 4*SPRITE_SIZE/2 && 0 <= event.motion.y && event.motion.y <= SPRITE_SIZE/2) {
+                                    if (buyTower(&tower_list, enemy_list, SORCERER_TOWER, selected_tile_pos[0], selected_tile_pos[1], &funds)) menu_hidden = true;
                                 }
                             }
                             break;
@@ -1389,11 +1462,13 @@ int main(int argc, char* argv[]) {
         drawProjectiles(rend, projectile_list);
         /* Draw the Menu if necessary */
         if (!menu_hidden){ 
+        	
             drawFilledRect(rend, 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT/4, 128, 128, 128, 255);
             drawRect(rend, 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT/4, 255, 255, 255, 255);
             for (unsigned long long i = 0; i < sizeof(towers)/sizeof(towers[0]); i++) {
                 drawImgStatic(rend, towers[i], i*SPRITE_SIZE/2, 0, SPRITE_SIZE/2, SPRITE_SIZE/2, NULL);
             }
+            drawImgDynamic(rend,highlighted_tile,(selected_tile_pos[0]-1)*TILE_WIDTH,(selected_tile_pos[1]-1)*TILE_HEIGHT,SPRITE_SIZE,SPRITE_SIZE,NULL);
         }
         /* Draw to window and loop */
         SDL_RenderPresent(rend);
@@ -1402,8 +1477,9 @@ int main(int argc, char* argv[]) {
     }
     
     /* Free allocated memory */
-    delImg(towers[4]);delImg(towers[3]);delImg(towers[2]);delImg(towers[1]);delImg(towers[0]);
+    delImg(towers[3]);delImg(towers[2]);delImg(towers[1]);delImg(towers[0]);
     delImg(grass_tiles[3]); delImg(grass_tiles[2]); delImg(grass_tiles[1]); delImg(grass_tiles[0]);
+    delImg(towers_upgrades[0]);
     free(selected_tile_pos);
     freeEverything(&enemy_list,&tower_list);
     /* Release resources */
