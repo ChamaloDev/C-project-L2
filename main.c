@@ -148,7 +148,8 @@ bool damageEnemy(Enemy *enemy, int amount, Enemy **enemy_list);
 Tower *addTower(Tower **tower_list, Enemy *enemy_list, char tower_type, int placement_row, int placement_collumn);
 Tower *buyTower(Tower **tower_list, Enemy *enemy_list, char tower_type, int placement_row, int placement_collumn, int *funds);
 void destroyTower(Tower *tower, Tower **tower_list);
-void updateTowers(Tower **tower_list, Enemy *enemy_list, Projectile **projectile_list);
+void towerAct(Tower *tower, Tower **tower_list, Enemy *enemy_list, Projectile **projectile_list);
+void updateTowers(Tower **currently_acting_tower, Tower **tower_list, Enemy *enemy_list, Projectile **projectile_list);
 Projectile *addProjectile(Projectile **projectile_list, Tower *origin, Enemy *target);
 void destroyProjectile(Projectile *projectile, Projectile **projectile_list);
 bool hasProjectileReachedTarget(Projectile *projectile);
@@ -297,7 +298,7 @@ void setAnimAttack(Animation *anim, int side) {
 void setAnimMove(Animation *anim, int dx, int dy) {
     int *data = malloc(2 * sizeof(int));
     data[0] = dx; data[1] = dy;
-    setAnim(anim, MOVE_ANIMATION, 3000, data);
+    setAnim(anim, MOVE_ANIMATION, 2000, data);
 }
 
 /* Set animation to projectile, goes from tile (x1 y1) to tile (x2 y2) at speed tile per second */
@@ -674,10 +675,32 @@ void destroyTower(Tower *tower, Tower **tower_list) {
     free(tower);
 }
 
+/* Make a singular tower act */
+void towerAct(Tower *tower, Tower **tower_list, Enemy *enemy_list, Projectile **projectile_list) {
+    if (!tower || !tower_list) return;
+    int i; Enemy *e; Tower *tmp;
+    /* Can only act when action cooldown reaches 0 or less */
+    tower->attack_cooldown--;
+    if (tower->attack_cooldown <= 0) {
+        tower->attack_cooldown = tower->base_attack_cooldown;
+        switch (tower->type) {
+            case ARCHER_TOWER:
+                /* Attack the firt enemy on the same row at most 10 tiles away */
+                for (i = 1; i <= 10 && tower->collumn+i <= NB_COLLUMNS; i++) if (getEnemyAndTowerAt(enemy_list, NULL, tower->collumn + i, tower->row, &e, &tmp)) {
+                    addProjectile(projectile_list, tower, e);
+                    break;
+                }
+                break;
+            default:  /* Invalid tower type */
+                printf("[ERROR]    Unknown tower type '%c'\n", tower->type);
+                break;
+        }
+    }
+}
+
 /* Update all towers */
-void updateTowers(Tower **tower_list, Enemy *enemy_list, Projectile **projectile_list) {
+void updateTowers(Tower **currently_acting_tower, Tower **tower_list, Enemy *enemy_list, Projectile **projectile_list) {
     Tower *tower = *tower_list; Tower *tmp;
-    int i; Enemy *e; Tower *t;
     while (tower) {
         /* Destroy tower when live points are bellow 0 */
         if (tower->live_points <= 0) {
@@ -686,28 +709,11 @@ void updateTowers(Tower **tower_list, Enemy *enemy_list, Projectile **projectile
             tower = tmp;
             continue;
         }
-        /* Make tower shoot */
-        tower->attack_cooldown--;
-        if (tower->attack_cooldown <= 0) {
-            tower->attack_cooldown = tower->base_attack_cooldown;
-            switch (tower->type) {
-                case ARCHER_TOWER:
-                    /* Attack the firt enemy on the same row at most 10 tiles away */
-                    for (i = 1; i <= 10 && tower->collumn+i <= NB_COLLUMNS; i++) if (getEnemyAndTowerAt(enemy_list, NULL, tower->collumn + i, tower->row, &e, &t)) {
-                        addProjectile(projectile_list, tower, e);
-                        break;
-                    }
-                    break;
-                default:  /* Invalid tower type */
-                    printf("[ERROR]    Unknown tower type '%c'\n", tower->type);
-                    tmp = tower->next;
-                    destroyTower(tower, tower_list);
-                    tower = tmp;
-                    continue;
-            }
-        }
-        /* Next tower action */
         tower = tower->next;
+    }
+    if (currently_acting_tower && *currently_acting_tower && projectile_list && !(*projectile_list)) {
+        towerAct(*currently_acting_tower, tower_list, enemy_list, projectile_list);
+        *currently_acting_tower = (*currently_acting_tower)->next;
     }
 }
 
@@ -803,7 +809,7 @@ void updateProjectiles(Projectile **projectile_list, Enemy **enemy_list) {
 /* Draw all projectiles */
 void drawProjectiles(SDL_Renderer *rend, Projectile *projectile_list) {
     while (projectile_list) {
-        drawImgDynamic(rend, projectile_list->sprite, 0, 0, SPRITE_SIZE, SPRITE_SIZE, projectile_list->anim);
+        drawImgDynamic(rend, projectile_list->sprite, 1000000, 1000000, SPRITE_SIZE, SPRITE_SIZE, projectile_list->anim);
         projectile_list = projectile_list->next;
     }
 }
@@ -1081,6 +1087,7 @@ int main(int argc, char* argv[]) {
     SDL_Surface *grass_tiles[] = {loadImg("others/grass_tile_a"), loadImg("others/grass_tile_b"), loadImg("others/grass_tile_c"), loadImg("others/grass_tile_d")};
 
     /* Main loop */
+    Enemy *currently_acting_enemy = NULL; Tower *currently_acting_tower = NULL;
     int cam_x_speed = 0, cam_y_speed = 0, cam_speed_mult = 0;
     int *selected_tile_pos = malloc(2 * sizeof(int)); selected_tile_pos[0] = 0; selected_tile_pos[1] = 0;
     bool menu_hidden = true;
@@ -1088,10 +1095,10 @@ int main(int argc, char* argv[]) {
     bool fullscreen = FULLSCREEN;
     SDL_Event event;
     bool running = true;
-    
+
     int nb_turns=0,funds=0;
     funds+=waves[0]->income;
-    
+
     while (running) {
         /* Process events */
         while (SDL_PollEvent(&event)) {
@@ -1144,7 +1151,8 @@ int main(int argc, char* argv[]) {
                             break;
                         /* [TEMPORARY] Make towers shoot */
                         case SDL_SCANCODE_C:
-                            updateTowers(&tower_list, enemy_list, &projectile_list);
+                            // updateTowers(&tower_list, enemy_list, &projectile_list);
+                            currently_acting_tower = tower_list;
                             break;
                         default:
                             break;
@@ -1241,6 +1249,7 @@ int main(int argc, char* argv[]) {
 
         /* Update entities */
         updateProjectiles(&projectile_list, &enemy_list);
+        updateTowers(&currently_acting_tower, &tower_list, enemy_list, &projectile_list);
 
         /* Clear screen */
         SDL_SetRenderDrawColor(rend, 0, 0, 0, 255);
