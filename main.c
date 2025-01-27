@@ -169,9 +169,7 @@ void drawImgStatic(SDL_Renderer *rend, SDL_Surface *img, int pos_x, int pos_y, i
 void drawImgDynamic(SDL_Renderer *rend, SDL_Surface *img, int pos_x, int pos_y, int width, int height, Animation *anim);
 void drawRect(SDL_Renderer *rend, int pos_x, int pos_y, int width, int height, int red, int green, int blue, int alpha);
 void drawFilledRect(SDL_Renderer *rend, int pos_x, int pos_y, int width, int height, int red, int green, int blue, int alpha);
-// void ShootProjectile(Tower *tower,Projectile **projectile_list);
-// void updateProjectile(Projectile *projectile_list);
-// void drawProjectiles(SDL_Renderer *rend, Projectile *projectile_list);
+
 
 
 
