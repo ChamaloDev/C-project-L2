@@ -170,7 +170,7 @@ void drawImgStatic(SDL_Renderer *rend, SDL_Surface *img, int pos_x, int pos_y, i
 void drawImgDynamic(SDL_Renderer *rend, SDL_Surface *img, int pos_x, int pos_y, int width, int height, Animation *anim);
 void drawRect(SDL_Renderer *rend, int pos_x, int pos_y, int width, int height, int red, int green, int blue, int alpha);
 void drawFilledRect(SDL_Renderer *rend, int pos_x, int pos_y, int width, int height, int red, int green, int blue, int alpha);
-
+void freeEverything(Enemy **enemy_list,Tower **tower_list);
 
 
 
@@ -948,7 +948,14 @@ void drawEnemiesAndTowers(SDL_Renderer *rend, Enemy *enemy_list, Tower *tower_li
     free(first_of_each_row);
 }
 
-
+void freeEverything(Enemy **enemy_list,Tower **tower_list){
+	while(*enemy_list){
+		destroyEnemy(*enemy_list,enemy_list);
+	}
+	while(*tower_list){
+		destroyTower(*tower_list,tower_list);
+	}
+}
 
 
 /* Convert a rect from a dynamic position (dependant of the camera position) to a static position (constant) */
@@ -1083,7 +1090,7 @@ int main(int argc, char* argv[]) {
     loadLevel("level_test", &waves, &nb_waves);
     Enemy *enemy_list = waves[0]->enemies; Tower *tower_list = NULL; Projectile *projectile_list = NULL;
     /* Load images */
-    SDL_Surface *towers[] = {loadImg("towers/Archer_tower")};
+    SDL_Surface *towers[] = {loadImg("towers/Archer_tower"),loadImg("towers/Empty_tower"),loadImg("towers/canon"),loadImg("towers/sorcerer"),loadImg("towers/sorcerer_evolved")};
     SDL_Surface *grass_tiles[] = {loadImg("others/grass_tile_a"), loadImg("others/grass_tile_b"), loadImg("others/grass_tile_c"), loadImg("others/grass_tile_d")};
 
     /* Main loop */
@@ -1264,10 +1271,12 @@ int main(int argc, char* argv[]) {
         drawEnemiesAndTowers(rend, enemy_list, tower_list);
         drawProjectiles(rend, projectile_list);
         /* Draw the Menu if necessary */
-        if (!menu_hidden){
+        if (!menu_hidden){ 
             drawFilledRect(rend, 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT/4, 128, 128, 128, 255);
             drawRect(rend, 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT/4, 255, 255, 255, 255);
-            drawImgStatic(rend, towers[0], 0, 0, SPRITE_SIZE/2, SPRITE_SIZE/2, NULL);
+            for (int i =0;i<(sizeof(towers)/sizeof(towers[0]));i++){
+            	drawImgStatic(rend,towers[i],i*SPRITE_SIZE/2,i, SPRITE_SIZE/2, SPRITE_SIZE/2, NULL);
+            }
         }
         /* Draw to window and loop */
         SDL_RenderPresent(rend);
@@ -1276,9 +1285,10 @@ int main(int argc, char* argv[]) {
     }
     
     /* Free allocated memory */
-    
+    delImg(towers[4]);delImg(towers[3]);delImg(towers[2]);delImg(towers[1]);delImg(towers[0]);
     delImg(grass_tiles[3]); delImg(grass_tiles[2]); delImg(grass_tiles[1]); delImg(grass_tiles[0]);
     free(selected_tile_pos);
+    freeEverything(&enemy_list,&tower_list);
     /* Release resources */
     SDL_DestroyRenderer(rend);
     SDL_DestroyWindow(wind);
