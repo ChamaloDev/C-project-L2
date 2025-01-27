@@ -151,6 +151,7 @@ Tower *buyTower(Tower **tower_list, Enemy *enemy_list, char tower_type, int plac
 void destroyTower(Tower *tower, Tower **tower_list);
 void towerAct(Tower *tower, Tower **tower_list, Enemy *enemy_list, Projectile **projectile_list);
 void updateTowers(Tower **currently_acting_tower, Tower **tower_list, Enemy *enemy_list, Projectile **projectile_list);
+void makeAllTowerAct(Tower **tower_list, Tower **currently_acting_tower);
 Projectile *addProjectile(Projectile **projectile_list, Tower *origin, Enemy *target);
 void destroyProjectile(Projectile *projectile, Projectile **projectile_list);
 bool hasProjectileReachedTarget(Projectile *projectile);
@@ -723,6 +724,16 @@ void updateTowers(Tower **currently_acting_tower, Tower **tower_list, Enemy *ene
     }
 }
 
+/* Make all tower act */
+void makeAllTowerAct(Tower **tower_list, Tower **currently_acting_tower) {
+    if (!tower_list) {
+        *currently_acting_tower = NULL;
+        return;
+    }
+    *currently_acting_tower = *tower_list;
+}
+
+
 
 
 /* Create and add a projectile to the projectile list */
@@ -1164,8 +1175,7 @@ int main(int argc, char* argv[]) {
                             break;
                         /* [TEMPORARY] Make towers shoot */
                         case SDL_SCANCODE_C:
-                            // updateTowers(&tower_list, enemy_list, &projectile_list);
-                            currently_acting_tower = tower_list;
+                            makeAllTowerAct(&tower_list, &currently_acting_tower);
                             break;
                         default:
                             break;
