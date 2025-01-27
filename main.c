@@ -144,7 +144,7 @@ Enemy **getEnemyInCollumn(Enemy *enemy_list, int collumn_nb);
 Enemy *getFirstEnemyInRow(Enemy *enemy_list, int row);
 int moveEnemy(Enemy *enemy, Enemy *enemy_list, Tower *tower_list, int delta, char axis);
 void updateEnemies(Enemy *enemy_list, Tower *tower_list);
-void damageEnemy(Enemy *enemy, int amount, Enemy **enemy_list);
+bool damageEnemy(Enemy *enemy, int amount, Enemy **enemy_list);
 Tower *addTower(Tower **tower_list, Enemy *enemy_list, char tower_type, int placement_row, int placement_collumn);
 Tower *buyTower(Tower **tower_list, Enemy *enemy_list, char tower_type, int placement_row, int placement_collumn, int *funds);
 void destroyTower(Tower *tower, Tower **tower_list);
@@ -580,13 +580,18 @@ void updateEnemies(Enemy *enemy_list, Tower *tower_list) {
 }
 
 /* Damage an enemy */
-void damageEnemy(Enemy *enemy, int amount, Enemy **enemy_list) {
-    if (!enemy || !amount) return;
+bool damageEnemy(Enemy *enemy, int amount, Enemy **enemy_list) {
+    if (!enemy || !amount || !enemy_list) return false;
+    /* Check that enemy still exist */
+    Enemy *e = *enemy_list;
+    while (e && e != enemy) e = e->next;
+    if (!e) return false;
     /* Damage enemy */
     enemy->live_points -= amount;
     setAnimHurt(enemy->anim);
     /* Kill enemy if health reaches 0 or less */
     if (enemy->live_points <= 0) destroyEnemy(enemy, enemy_list);
+    return true;
 }
 
 
