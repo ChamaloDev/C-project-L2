@@ -144,14 +144,17 @@ Enemy **getFirstEnemyOfAllRows(Enemy *enemy_list);
 Enemy **getEnemyInCollumn(Enemy *enemy_list, int collumn_nb);
 Enemy *getFirstEnemyInRow(Enemy *enemy_list, int row);
 int moveEnemy(Enemy *enemy, Enemy *enemy_list, Tower *tower_list, int delta, char axis);
-void updateEnemies(Enemy *enemy_list, Tower *tower_list);
+void makeAllEnemiesMove(Enemy *enemy_list, Tower *tower_list);
+void enemyAttack(Enemy *enemy, Tower **tower_list, Enemy **enemy_list);
+void makeAllEnemiesAttack(Enemy **enemy_list, Enemy **currently_acting_enemy);
 bool damageEnemy(Enemy *enemy, int amount, Enemy **enemy_list);
 Tower *addTower(Tower **tower_list, Enemy *enemy_list, char tower_type, int placement_row, int placement_collumn);
 Tower *buyTower(Tower **tower_list, Enemy *enemy_list, char tower_type, int placement_row, int placement_collumn, int *funds);
 void destroyTower(Tower *tower, Tower **tower_list);
 void towerAct(Tower *tower, Tower **tower_list, Enemy *enemy_list, Projectile **projectile_list);
 void updateTowers(Tower **currently_acting_tower, Tower **tower_list, Enemy *enemy_list, Projectile **projectile_list);
-void makeAllTowerAct(Tower **tower_list, Tower **currently_acting_tower);
+void makeAllTowersAct(Tower **tower_list, Tower **currently_acting_tower);
+bool damageTower(Tower *tower, int amount, Tower **tower_list);
 Projectile *addProjectile(Projectile **projectile_list, Tower *origin, Enemy *target);
 void destroyProjectile(Projectile *projectile, Projectile **projectile_list);
 bool hasProjectileReachedTarget(Projectile *projectile);
@@ -293,7 +296,7 @@ void setAnimDead(Animation *anim) {
 void setAnimAttack(Animation *anim, int side) {
     int *data = malloc(1 * sizeof(int));
     data[0] = side;
-    setAnim(anim, ATTACK_ANIMATION, 1000, data);
+    setAnim(anim, ATTACK_ANIMATION, 500, data);
 }
 
 /* Set animation to move (dx dy) tiles */
@@ -330,6 +333,12 @@ bool applyAnim(Animation *anim, SDL_Rect *rect) {
             var_a = (CURRENT_TICK - anim->start_tick) / (double) anim->length;
             var_b = periodicFunction(var_a*1000.0 * 6.0) / 20.0 - 1.0/40.0;
             rect->x -= rect->w * var_b;
+            break;
+        /* Attack animation (quickly move horizontaly) */
+        case ATTACK_ANIMATION:
+            var_a = (CURRENT_TICK - anim->start_tick) / (double) anim->length;
+            var_b = periodicFunction(var_a*1000.0) / 5.0;
+            rect->x += rect->w * var_b * anim->data[0];
             break;
         /* Movement animation (go to destination by doing small jumps) */
         case MOVE_ANIMATION:
@@ -413,7 +422,7 @@ bool addEnemy(Enemy **enemy_list, char enemy_type, int spawn_row, int spawn_coll
             break;
         case GOBLIN_ENEMY:
             new_enemy->live_points = 6;
-            new_enemy->base_speed = 5;
+            new_enemy->base_speed = 4;
             new_enemy->sprite = loadImg("enemies/Goblin");
             break;
         case ORC_ENEMY:
@@ -423,6 +432,7 @@ bool addEnemy(Enemy **enemy_list, char enemy_type, int spawn_row, int spawn_coll
             break;
         default:  /* Unknown enemy type */
             printf("[ERROR]    Unknown enemy type '%c'\n", enemy_type);
+            destroyAnim(new_enemy->anim);
             free(new_enemy);
             return false;
     }
@@ -563,8 +573,31 @@ int moveEnemy(Enemy *enemy, Enemy *enemy_list, Tower *tower_list, int delta, cha
     return 0;
 }
 
-/* Update all enemies by simulating a turn passing */
-void updateEnemies(Enemy *enemy_list, Tower *tower_list) {
+/* Update all enemies */
+void updateEnemies(Enemy **currently_acting_enemy, Enemy **enemy_list, Tower **tower_list) {
+    Enemy *enemy;// = *enemy_list; Enemy *tmp;
+    // while (enemy) {
+    //     /* Destroy enemy when live points are bellow 0 */
+    //     if (enemy->live_points <= 0) {
+    //         tmp = enemy->next;
+    //         destroyEnemy(enemy, enemy_list);
+    //         enemy = tmp;
+    //         continue;
+    //     }
+    //     tower = tower->next;
+    // }
+    if (currently_acting_enemy && *currently_acting_enemy) {
+        /* Wait for previous enemy to finish his attack before attacking */
+        enemy = *enemy_list;
+        while (enemy && enemy->next != *currently_acting_enemy) enemy = enemy->next;
+        if (enemy && enemy->anim && enemy->anim->type == ATTACK_ANIMATION) return;
+        enemyAttack(*currently_acting_enemy, tower_list, enemy_list);
+        *currently_acting_enemy = (*currently_acting_enemy)->next;
+    }
+}
+
+/* Make all enemies move accordingly to their type */
+void makeAllEnemiesMove(Enemy *enemy_list, Tower *tower_list) {
     /* Update enemies from left to right, from top to bottom */
     Enemy **first_of_each_row = getFirstEnemyOfAllRows(enemy_list);
     Enemy *enemy;
@@ -583,6 +616,54 @@ void updateEnemies(Enemy *enemy_list, Tower *tower_list) {
     }
     /* Free memory */
     free(first_of_each_row);
+}
+
+/* Make a singular enemy attack */
+void enemyAttack(Enemy *enemy, Tower **tower_list, Enemy **enemy_list) {
+    if (!enemy) return;
+    /* Getting tower in front of the enemy (if there is one) */
+    Enemy *e; Tower *tower;
+    getEnemyAndTowerAt(*enemy_list, *tower_list, enemy->collumn-1, enemy->row, &e, &tower);
+    /* Making enemy act accordingly to its type */
+    switch (enemy->type) {
+        case SLIME_ENEMY:
+            if (tower) {
+                damageTower(tower, 2, tower_list);
+                setAnimAttack(enemy->anim, -1);
+            }
+            break;
+        case GELLY_ENEMY:
+            if (tower) {
+                damageTower(tower, 2, tower_list);
+                setAnimAttack(enemy->anim, -1);
+            }
+            break;
+        case GOBLIN_ENEMY:
+            if (tower) {
+                damageTower(tower, 3, tower_list);
+                setAnimAttack(enemy->anim, -1);
+            }
+            break;
+        case ORC_ENEMY:
+            if (tower) {
+                damageTower(tower, 5, tower_list);
+                setAnimAttack(enemy->anim, -1);
+            }
+            break;
+        default:  /* Unknown enemy type */
+            printf("[ERROR]    Unknown enemy type '%c'\n", enemy->type);
+            destroyEnemy(enemy, enemy_list);
+            break;
+    }
+}
+
+/* Make all enemies attack */
+void makeAllEnemiesAttack(Enemy **enemy_list, Enemy **currently_acting_enemy) {
+    if (!enemy_list) {
+        *currently_acting_enemy = NULL;
+        return;
+    }
+    *currently_acting_enemy = *enemy_list;
 }
 
 /* Damage an enemy */
@@ -707,17 +788,17 @@ void towerAct(Tower *tower, Tower **tower_list, Enemy *enemy_list, Projectile **
 
 /* Update all towers */
 void updateTowers(Tower **currently_acting_tower, Tower **tower_list, Enemy *enemy_list, Projectile **projectile_list) {
-    Tower *tower = *tower_list; Tower *tmp;
-    while (tower) {
-        /* Destroy tower when live points are bellow 0 */
-        if (tower->live_points <= 0) {
-            tmp = tower->next;
-            destroyTower(tower, tower_list);
-            tower = tmp;
-            continue;
-        }
-        tower = tower->next;
-    }
+    // Tower *tower = *tower_list; Tower *tmp;
+    // while (tower) {
+    //     /* Destroy tower when live points are bellow 0 */
+    //     if (tower->live_points <= 0) {
+    //         tmp = tower->next;
+    //         destroyTower(tower, tower_list);
+    //         tower = tmp;
+    //         continue;
+    //     }
+    //     tower = tower->next;
+    // }
     if (currently_acting_tower && *currently_acting_tower && projectile_list && !(*projectile_list)) {
         towerAct(*currently_acting_tower, tower_list, enemy_list, projectile_list);
         *currently_acting_tower = (*currently_acting_tower)->next;
@@ -725,12 +806,27 @@ void updateTowers(Tower **currently_acting_tower, Tower **tower_list, Enemy *ene
 }
 
 /* Make all tower act */
-void makeAllTowerAct(Tower **tower_list, Tower **currently_acting_tower) {
+void makeAllTowersAct(Tower **tower_list, Tower **currently_acting_tower) {
     if (!tower_list) {
         *currently_acting_tower = NULL;
         return;
     }
     *currently_acting_tower = *tower_list;
+}
+
+/* Damage a tower */
+bool damageTower(Tower *tower, int amount, Tower **tower_list) {
+    if (!tower || !amount || !tower_list) return false;
+    /* Check that tower still exist */
+    Tower *t = *tower_list;
+    while (t && t != tower) t = t->next;
+    if (!t) return false;
+    /* Damage tower */
+    tower->live_points -= amount;
+    setAnimHurt(tower->anim);
+    /* Kill tower if health reaches 0 or less */
+    if (tower->live_points <= 0) destroyTower(tower, tower_list);
+    return true;
 }
 
 
@@ -966,12 +1062,12 @@ void drawEnemiesAndTowers(SDL_Renderer *rend, Enemy *enemy_list, Tower *tower_li
 }
 
 void freeEverything(Enemy **enemy_list,Tower **tower_list){
-	while(*enemy_list){
-		destroyEnemy(*enemy_list,enemy_list);
-	}
-	while(*tower_list){
-		destroyTower(*tower_list,tower_list);
-	}
+    while(*enemy_list){
+        destroyEnemy(*enemy_list,enemy_list);
+    }
+    while(*tower_list){
+        destroyTower(*tower_list,tower_list);
+    }
 }
 
 
@@ -1171,11 +1267,15 @@ int main(int argc, char* argv[]) {
                             break;
                         /* [TEMPORARY] Play 1 turn */
                         case SDL_SCANCODE_SPACE:
-                            updateEnemies(enemy_list, tower_list);
+                            makeAllEnemiesMove(enemy_list, tower_list);
                             break;
                         /* [TEMPORARY] Make towers shoot */
                         case SDL_SCANCODE_C:
-                            makeAllTowerAct(&tower_list, &currently_acting_tower);
+                            makeAllTowersAct(&tower_list, &currently_acting_tower);
+                            break;
+                        /* [TEMPORARY] Make enemies attack */
+                        case SDL_SCANCODE_V:
+                            makeAllEnemiesAttack(&enemy_list, &currently_acting_enemy);
                             break;
                         default:
                             break;
@@ -1272,6 +1372,7 @@ int main(int argc, char* argv[]) {
 
         /* Update entities */
         updateProjectiles(&projectile_list, &enemy_list);
+        updateEnemies(&currently_acting_enemy, &enemy_list, &tower_list);
         updateTowers(&currently_acting_tower, &tower_list, enemy_list, &projectile_list);
 
         /* Clear screen */
@@ -1290,8 +1391,8 @@ int main(int argc, char* argv[]) {
         if (!menu_hidden){ 
             drawFilledRect(rend, 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT/4, 128, 128, 128, 255);
             drawRect(rend, 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT/4, 255, 255, 255, 255);
-            for (int i =0;i<(sizeof(towers)/sizeof(towers[0]));i++){
-            	drawImgStatic(rend,towers[i],i*SPRITE_SIZE/2,i, SPRITE_SIZE/2, SPRITE_SIZE/2, NULL);
+            for (unsigned long long i = 0; i < sizeof(towers)/sizeof(towers[0]); i++) {
+                drawImgStatic(rend, towers[i], i*SPRITE_SIZE/2, 0, SPRITE_SIZE/2, SPRITE_SIZE/2, NULL);
             }
         }
         /* Draw to window and loop */
