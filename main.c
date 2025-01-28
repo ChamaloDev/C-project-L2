@@ -4,18 +4,19 @@
 #include <stdbool.h>
 #include <time.h>
 #include "src/SDL2/include/SDL2/SDL.h"
-#define FULLSCREEN false    // Set if the game should start on fullscreen (F11 to toggle on/off)
-#define ANTI_ALIASING true  // Set if the game should use anti aliasing
-#define FPS 60              // Game target FPS
-#define NB_ROWS 7           // Number of rows for the map
-#define NB_COLLUMNS 21      // Number of collumns for the map
-#define TILE_WIDTH 256      // Width of a tile in px
-#define TILE_HEIGHT 192     // Height of a tile in px
-#define SPRITE_SIZE 320     // Height and width of all sprites in px
-#define BASE_CAM_SPEED 10   // Default camera speed when moving using WASD
-#define CAM_SPEED_MULT 3    // Camera speed multiplier when using lShift or lCtrl
+#include "src/SDL2/SDL2_ttf/SDL_ttf.h"
+//sudo apt-get install libsdl-ttf2.0-dev
+#define FULLSCREEN false   // Set if the game should start on fullscreen (F11 to toggle on/off)
+#define FPS 60             // Game target FPS
+#define NB_ROWS 7          // Number of rows for the map
+#define NB_COLLUMNS 21     // Number of collumns for the map
+#define TILE_WIDTH 256     // Width of a tile in px
+#define TILE_HEIGHT 192    // Height of a tile in px
+#define SPRITE_SIZE 320    // Height and width of all sprites in px
+#define BASE_CAM_SPEED 10  // Default camera speed when moving using WASD
+#define CAM_SPEED_MULT 3   // Camera speed multiplier when using lShift or lCtrl
 
-
+#define MAX_LENGTH_TOWER_NAME 20
 
 
 /* Enemy types */
@@ -145,7 +146,6 @@ void setAnimMove(Animation *anim, int dx, int dy);
 void setAnimProjectile(Animation *anim, int x1, int y1, int x2, int y2, double speed);
 bool applyAnim(Animation *anim, SDL_Rect *rect);
 bool getEnemyAndTowerAt(Enemy *enemy_list, Tower *tower_list, int collumn, int row, Enemy **enemy, Tower **tower);
-bool isTileEmpty(Enemy *enemy_list, Tower *tower_list, int collumn, int row);
 bool addEnemy(Enemy **enemy_list, char enemy_type, int spawn_row, int spawn_collumn);
 void destroyEnemy(Enemy *enemy, Enemy **enemy_list);
 Enemy **getFirstEnemyOfAllRows(Enemy *enemy_list);
@@ -184,8 +184,9 @@ void drawImgDynamic(SDL_Renderer *rend, SDL_Surface *img, int pos_x, int pos_y, 
 void drawRect(SDL_Renderer *rend, int pos_x, int pos_y, int width, int height, int red, int green, int blue, int alpha);
 void drawFilledRect(SDL_Renderer *rend, int pos_x, int pos_y, int width, int height, int red, int green, int blue, int alpha);
 void freeEverything(Enemy **enemy_list,Tower **tower_list);
-
-
+void Write(SDL_Renderer *rend,TTF_Font *font,const char *text,int pos_x,int pos_y, int width,int height,int red,int green,int blue,int alpha);
+Tower *upgradeTower(Tower **tower_list, Enemy *enemy_list, char tower_type, int placement_collumn, int placement_row, int *funds);
+void deleteTower(Tower *tower, Tower **tower_list,int *funds);
 
 /* Return an integer between a and b (included) */
 int randrange(int a, int b) {
@@ -383,7 +384,7 @@ bool getEnemyAndTowerAt(Enemy *enemy_list, Tower *tower_list, int collumn, int r
             break;
         }
         enemy_list = enemy_list->next;
-    }
+    }	
     /* Getting tower */
     while (tower_list) {
         if (tower_list->collumn == collumn && tower_list->row == row) {
@@ -723,15 +724,21 @@ Tower *addTower(Tower **tower_list, Enemy *enemy_list, char tower_type, int plac
 		case CANON:
             new_tower->live_points = 5;
             new_tower->cost = 30;
-            new_tower->base_attack_cooldown = 2;
+            new_tower->base_attack_cooldown = 3;
             new_tower->sprite = loadImg("towers/canon");
             break;
 		case SORCERER_TOWER:
-            new_tower->live_points = 10;
+            new_tower->live_points = 9;
             new_tower->cost = 80;
-            new_tower->base_attack_cooldown = 1;
+            new_tower->base_attack_cooldown = 2;
             new_tower->sprite = loadImg("towers/sorcerer");
             break;
+        case MAGE_TOWER:
+        	new_tower->live_points=11;
+        	new_tower->cost = 150;
+        	new_tower->base_attack_cooldown=1;
+        	new_tower->sprite = loadImg("towers/sorcerer_evolved");
+        	break;
 		default:  /* Invalid tower type */
             printf("[ERROR]    Unknown tower type '%c'\n", tower_type);
             destroyTower(new_tower, tower_list);
@@ -762,13 +769,40 @@ Tower *buyTower(Tower **tower_list, Enemy *enemy_list, char tower_type, int plac
     new_tower = addTower(tower_list, enemy_list, tower_type, placement_collumn, placement_row);
     /* If new_tower is NULL, it means it couldn't be build */
     if (!new_tower) return NULL;
-    /* Check if the player has enougth funds to build the tower */
+    /* Check if the player has enough funds to build the tower */
     if (*funds < new_tower->cost) {
         destroyTower(new_tower, tower_list);
         return NULL;
     }
     *funds -= new_tower->cost;
     return new_tower;
+}
+
+/* Try to upgrade a tower */
+Tower *upgradeTower(Tower **tower_list, Enemy *enemy_list, char tower_type, int placement_collumn, int placement_row, int *funds) {
+	Tower *old_tower,*new_tower;
+	switch (tower_type){
+		case MAGE_TOWER :
+			getEnemyAndTowerAt(NULL,*tower_list,placement_collumn,placement_row,NULL,&old_tower);
+			destroyTower(old_tower,tower_list);
+			new_tower=addTower(tower_list,enemy_list,MAGE_TOWER,placement_collumn,placement_row);
+			if (*funds < new_tower->cost){
+				destroyTower(new_tower,tower_list);
+				addTower(tower_list,enemy_list,tower_type,placement_collumn,placement_row);
+				return NULL;
+			}
+			*funds-=new_tower->cost;
+			break;
+		default:
+			break;
+	}
+	return new_tower;
+}
+
+//delete the tower and refund the money ( in case of miss click)
+void deleteTower(Tower *tower, Tower **tower_list,int *funds){
+	*funds+=tower->cost;
+	destroyTower(tower,tower_list);
 }
 
 /* Destroy an tower and free its allocated memory */
@@ -990,7 +1024,6 @@ void drawProjectiles(SDL_Renderer *rend, Projectile *projectile_list) {
         projectile_list = projectile_list->next;
     }
 }
-
 
 
 
@@ -1229,7 +1262,18 @@ void drawRectDynamic(SDL_Renderer *rend, int pos_x, int pos_y, int width, int he
     drawRect(rend, rect.x, rect.y, rect.w, rect.h, red, green, blue, alpha);
 }
 
-
+void Write(SDL_Renderer *rend,TTF_Font *font,const char *text,int pos_x,int pos_y, int width,int height,int red,int green,int blue,int alpha){
+	SDL_Color TextColor = {red, green, blue, alpha} ;
+	SDL_Rect dest = {pos_x, pos_y, width, height};
+	SDL_Surface *textRender = TTF_RenderText_Blended(font, text,TextColor);
+	if (!textRender){
+		printf("Error when rendering text surface %s\n",SDL_GetError());
+	}
+	SDL_Texture *textTexture = SDL_CreateTextureFromSurface(rend,textRender);
+	SDL_RenderCopy(rend,textTexture,NULL,&dest);
+	SDL_DestroyTexture(textTexture);
+	SDL_FreeSurface(textRender);
+}
 
 
 int main(int argc, char* argv[]) {
@@ -1241,7 +1285,15 @@ int main(int argc, char* argv[]) {
         printf("Error initializing SDL: %s\n", SDL_GetError());
         return 0;
     }
-
+	if (TTF_Init() != 0){
+		printf("Error initializing TTF %s\n",SDL_GetError());
+	}
+	TTF_Font *font = TTF_OpenFont("src/fonts/AlmendraRegular.ttf",24);
+	if (!font){
+		printf("Error creating font : %s\n",SDL_GetError());
+		SDL_Quit();
+		return 0;
+	}
     /* Create a window */
     SDL_Window* wind = SDL_CreateWindow("Game of the year", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, WINDOW_WIDTH, WINDOW_HEIGHT, 0);
     if (!wind) {
@@ -1260,7 +1312,7 @@ int main(int argc, char* argv[]) {
         return 0;
     }
     /* Antialiasing */
-    if (ANTI_ALIASING) SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "1");
+    SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "1");
 
     // [TEMPORARY]
     Wave **waves; int nb_waves;
@@ -1271,6 +1323,8 @@ int main(int argc, char* argv[]) {
     SDL_Surface *towers_upgrades[]={loadImg("towers/sorcerer_evolved")};
     SDL_Surface *grass_tiles[] = {loadImg("others/grass_tile_a"), loadImg("others/grass_tile_b"), loadImg("others/grass_tile_c"), loadImg("others/grass_tile_d")};
 	SDL_Surface *highlighted_tile = loadImg("others/tile_choosed");
+	SDL_Surface *delete_tower = loadImg("others/delete");
+	char TowersNames[4][MAX_LENGTH_TOWER_NAME]={"Archer Tower 50G","Empty_tower 25G","Canon 30G","Sorcerer tower 80G"};
     /* Main loop */
     Enemy *currently_acting_enemy = NULL; Tower *currently_acting_tower = NULL;
     int cam_x_speed = 0, cam_y_speed = 0, cam_speed_mult = 0;
@@ -1280,7 +1334,7 @@ int main(int argc, char* argv[]) {
     bool fullscreen = FULLSCREEN;
     SDL_Event event;
     bool running = true;
-
+	Tower *TowerOnTile;
     int nb_turns=0,funds=0;
     funds+=waves[0]->income;
 
@@ -1386,6 +1440,7 @@ int main(int argc, char* argv[]) {
                                 selected_tile_pos[0] = event.button.x;
                                 selected_tile_pos[1] = event.button.y;
                                 pixelToTile(&selected_tile_pos[0], &selected_tile_pos[1]);
+                                
                                 if (1 <= selected_tile_pos[0] && selected_tile_pos[0] <= NB_COLLUMNS && 1 <= selected_tile_pos[1] && selected_tile_pos[1] <= NB_ROWS) {
                                     menu_hidden = false;
                                     
@@ -1395,10 +1450,11 @@ int main(int argc, char* argv[]) {
                                     menu_hidden = true;
                                 }
                             }
+
                             /* If menu selected and player clicks on a tower icon, try to buy and place tower (if possible) */
                             else {
                                 /* LVL 1 archer tower */
-                                if (0 <= event.motion.x && event.motion.x <= SPRITE_SIZE/4 && 0 <= event.motion.y && event.motion.y <= SPRITE_SIZE/2) {
+                                if (0 <= event.motion.x && event.motion.x <= SPRITE_SIZE/2 && 0 <= event.motion.y && event.motion.y <= SPRITE_SIZE/2) {
                                     if (buyTower(&tower_list, enemy_list, ARCHER_TOWER, selected_tile_pos[0], selected_tile_pos[1], &funds)) menu_hidden = true;
                                 }
                                 else if (SPRITE_SIZE/2 <= event.motion.x && event.motion.x <= 2*SPRITE_SIZE/2 && 0 <= event.motion.y && event.motion.y <= SPRITE_SIZE/2) {
@@ -1453,6 +1509,7 @@ int main(int argc, char* argv[]) {
         /* Clear screen */
         SDL_SetRenderDrawColor(rend, 0, 0, 0, 255);
         SDL_RenderClear(rend);
+        Write(rend,font,"PROUT",0,0,150,150,255,255,255,255);
         /* Move camera */
         CAM_POS_X += BASE_CAM_SPEED * cam_x_speed * pow(CAM_SPEED_MULT, cam_speed_mult) * pow(1.4142/2, cam_x_speed && cam_y_speed) / CAM_SCALE;
         CAM_POS_Y += BASE_CAM_SPEED * cam_y_speed * pow(CAM_SPEED_MULT, cam_speed_mult) * pow(1.4142/2, cam_x_speed && cam_y_speed) / CAM_SCALE;
@@ -1464,14 +1521,26 @@ int main(int argc, char* argv[]) {
         drawProjectiles(rend, projectile_list);
         /* Draw the Menu if necessary */
         if (!menu_hidden){ 
-        	
-            drawFilledRect(rend, 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT/4, 128, 128, 128, 255);
-            drawRect(rend, 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT/4, 255, 255, 255, 255);
-            for (unsigned long long i = 0; i < sizeof(towers)/sizeof(towers[0]); i++) {
-                drawImgStatic(rend, towers[i], i*SPRITE_SIZE/2, 0, SPRITE_SIZE/2, SPRITE_SIZE/2, NULL);
-            }
+            drawFilledRect(rend, 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT/4+10, 128, 128, 128, 255);
+            drawRect(rend, 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT/4+10, 255, 255, 255, 255);
+            
+            if (isTileEmpty(NULL,tower_list,selected_tile_pos[0],selected_tile_pos[1])){
+		        for (unsigned long long i = 0; i < sizeof(towers)/sizeof(towers[0]); i++) {
+		            drawImgStatic(rend, towers[i], i*SPRITE_SIZE/2+50, 0, SPRITE_SIZE/2, SPRITE_SIZE/2, NULL);
+		            //Write(rend,font,TowersNames[i],i*SPRITE_SIZE/2,SPRITE_SIZE/2+10,WINDOW_WIDTH/4,WINDOW_HEIGHT/4-SPRITE_SIZE+5,255,255,255,255);
+		            Write(rend,font,TowersNames[i],i*SPRITE_SIZE/2+50,SPRITE_SIZE/2-10,SPRITE_SIZE/2,50,255,255,255,255);
+		        }
+		    }
+		    
+		    else{
+				//if (towertype == SORCERER_TOWER){
+				//	drawImgStatic(rend,towers_upgrades[0],0,0,SPRITE_SIZE/2,SPRITE_SIZE/2,NULL);
+				//}
+				drawImgStatic(rend,delete_tower,WINDOW_WIDTH-(SPRITE_SIZE/2),0,SPRITE_SIZE/2,SPRITE_SIZE/2,NULL);
+		    }
             drawImgDynamic(rend,highlighted_tile,(selected_tile_pos[0]-1)*TILE_WIDTH,(selected_tile_pos[1]-1)*TILE_HEIGHT,SPRITE_SIZE,SPRITE_SIZE,NULL);
         }
+        
         /* Draw to window and loop */
         SDL_RenderPresent(rend);
         SDL_Delay(max(1000/FPS - (SDL_GetTicks64()-CURRENT_TICK), 0));
@@ -1479,14 +1548,17 @@ int main(int argc, char* argv[]) {
     }
     
     /* Free allocated memory */
+    delImg(delete_tower);
     delImg(towers[3]);delImg(towers[2]);delImg(towers[1]);delImg(towers[0]);
     delImg(grass_tiles[3]); delImg(grass_tiles[2]); delImg(grass_tiles[1]); delImg(grass_tiles[0]);
     delImg(towers_upgrades[0]);
     free(selected_tile_pos);
     freeEverything(&enemy_list,&tower_list);
     /* Release resources */
+    TTF_CloseFont(font);
     SDL_DestroyRenderer(rend);
     SDL_DestroyWindow(wind);
+    TTF_Quit();
     SDL_Quit();
     return 0;
 }
