@@ -4,15 +4,16 @@
 #include <stdbool.h>
 #include <time.h>
 #include "src/SDL2/include/SDL2/SDL.h"
-#define FULLSCREEN false   // Set if the game should start on fullscreen (F11 to toggle on/off)
-#define FPS 60             // Game target FPS
-#define NB_ROWS 7          // Number of rows for the map
-#define NB_COLLUMNS 21     // Number of collumns for the map
-#define TILE_WIDTH 256     // Width of a tile in px
-#define TILE_HEIGHT 192    // Height of a tile in px
-#define SPRITE_SIZE 320    // Height and width of all sprites in px
-#define BASE_CAM_SPEED 10  // Default camera speed when moving using WASD
-#define CAM_SPEED_MULT 3   // Camera speed multiplier when using lShift or lCtrl
+#define FULLSCREEN false    // Set if the game should start on fullscreen (F11 to toggle on/off)
+#define ANTI_ALIASING true  // Set if the game should use anti aliasing
+#define FPS 60              // Game target FPS
+#define NB_ROWS 7           // Number of rows for the map
+#define NB_COLLUMNS 21      // Number of collumns for the map
+#define TILE_WIDTH 256      // Width of a tile in px
+#define TILE_HEIGHT 192     // Height of a tile in px
+#define SPRITE_SIZE 320     // Height and width of all sprites in px
+#define BASE_CAM_SPEED 10   // Default camera speed when moving using WASD
+#define CAM_SPEED_MULT 3    // Camera speed multiplier when using lShift or lCtrl
 
 
 
@@ -1259,7 +1260,7 @@ int main(int argc, char* argv[]) {
         return 0;
     }
     /* Antialiasing */
-    SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "1");
+    if (ANTI_ALIASING) SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "1");
 
     // [TEMPORARY]
     Wave **waves; int nb_waves;
