@@ -4,7 +4,7 @@
 #include <stdbool.h>
 #include <time.h>
 #include "src/SDL2/include/SDL2/SDL.h"
-#include "src/SDL2/include/SDL2/SDL_ttf.h"
+#include "src/SDL2/SDL2_ttf/SDL_ttf.h"
 #define FULLSCREEN false   // Set if the game should start on fullscreen (F11 to toggle on/off)
 #define ANTI_ALIASING "2"  // Set if the game should use anti aliasing for rendering
 #define FPS 60             // Game target FPS
@@ -29,6 +29,7 @@
 #define CANON 'C'
 #define SORCERER_TOWER 'S'
 #define MAGE_TOWER 'M'
+#define DESTROYER 'D'
 //Mage is the evolution of sorcerer
 
 /* Animation type */
@@ -736,6 +737,12 @@ Tower *addTower(Tower **tower_list, Enemy *enemy_list, char tower_type, int plac
             new_tower->base_attack_cooldown = 1;
             new_tower->sprite = loadImg("towers/sorcerer_evolved");
             break;
+        case DESTROYER:
+        	new_tower->live_points = 8;
+            new_tower->cost = 120;
+            new_tower->base_attack_cooldown = 3;
+            new_tower->sprite = loadImg("towers/canon_evolved");
+        	break;
         default:  /* Invalid tower type */
             printf("[ERROR]    Unknown tower type '%c'\n", tower_type);
             destroyTower(new_tower, tower_list);
@@ -779,7 +786,7 @@ Tower *buyTower(Tower **tower_list, Enemy *enemy_list, char tower_type, int plac
 Tower *upgradeTower(Tower **tower_list, Enemy *enemy_list, char tower_type, int placement_collumn, int placement_row, int *funds) {
     Tower *old_tower,*new_tower;
     switch (tower_type){
-        case MAGE_TOWER :
+        case SORCERER_TOWER :
             getEnemyAndTowerAt(NULL,*tower_list,placement_collumn,placement_row,NULL,&old_tower);
             destroyTower(old_tower,tower_list);
             new_tower=addTower(tower_list,enemy_list,MAGE_TOWER,placement_collumn,placement_row);
@@ -790,8 +797,20 @@ Tower *upgradeTower(Tower **tower_list, Enemy *enemy_list, char tower_type, int 
             }
             *funds-=new_tower->cost;
             break;
-        default:
+        case CANON :
+            getEnemyAndTowerAt(NULL,*tower_list,placement_collumn,placement_row,NULL,&old_tower);
+            destroyTower(old_tower,tower_list);
+            new_tower=addTower(tower_list,enemy_list,DESTROYER,placement_collumn,placement_row);
+            if (*funds < new_tower->cost){
+                destroyTower(new_tower,tower_list);
+                addTower(tower_list,enemy_list,tower_type,placement_collumn,placement_row);
+                return NULL;
+            }
+            *funds-=new_tower->cost;
             break;
+        default:
+        	printf("No upgrade for that kind of tower");
+        	return NULL;
     }
     return new_tower;
 }
@@ -849,6 +868,14 @@ void towerAct(Tower *tower, Tower **tower_list, Enemy *enemy_list, Projectile **
             case SORCERER_TOWER:
                 /* Attack the firt enemy on the same row at most 8 tiles away */
                 for (i = 1; i <= 8 && tower->collumn+i <= NB_COLLUMNS; i++) if (getEnemyAndTowerAt(enemy_list, NULL, tower->collumn + i, tower->row, &e, &tmp)) {
+                    tower->attack_cooldown = tower->base_attack_cooldown;
+                    addProjectile(projectile_list, tower, e);
+                    break;
+                }
+                break;
+            case DESTROYER:
+                /* Attack the firt enemy on the same row at most 4 tiles away */
+                for (i = 1; i <= 4 && tower->collumn+i <= NB_COLLUMNS; i++) if (getEnemyAndTowerAt(enemy_list, NULL, tower->collumn + i, tower->row, &e, &tmp)) {
                     tower->attack_cooldown = tower->base_attack_cooldown;
                     addProjectile(projectile_list, tower, e);
                     break;
@@ -938,6 +965,10 @@ Projectile *addProjectile(Projectile **projectile_list, Tower *origin, Enemy *ta
             projectile_speed = 5.0;
             break;
         /* Shoot by a tower of unknown type */
+        case DESTROYER:
+            new_projectile->sprite = loadImg("projectiles/destroyer_bullet");
+            projectile_speed = 10.0;
+            break;
         default:
             printf("[ERROR]    Unknown tower type '%c'\n", origin->type);
             destroyProjectile(new_projectile, projectile_list);
@@ -1005,7 +1036,10 @@ void updateProjectiles(Projectile **projectile_list, Enemy **enemy_list) {
                     break;
                 case MAGE_TOWER:
                     damageEnemy(projectile->target, 6, enemy_list);
-                    break;               
+                    break;         
+                case DESTROYER:
+                    damageEnemy(projectile->target, 10, enemy_list);
+                    break;   
                 default:  /* Invalid tower type */
                     printf("[ERROR]    Unknown tower type '%c'\n", projectile->origin->type);
                     break;
@@ -1292,12 +1326,15 @@ int main(int argc, char* argv[]) {
     /* Initialize SDL_ttf */
     if (TTF_Init() != 0){
         printf("Error initializing TTF %s\n", TTF_GetError());
+        SDL_Quit();
+        return 0;
     }
 
     /* Initialize the font */
     TTF_Font *font = TTF_OpenFont("src/fonts/Almendra-Regular.ttf", 16);
     if (!font){
         printf("Error creating font : %s\n", TTF_GetError());
+        TTF_Quit();
         SDL_Quit();
         return 0;
     }
@@ -1328,7 +1365,7 @@ int main(int argc, char* argv[]) {
     Enemy *enemy_list = waves[0]->enemies; Tower *tower_list = NULL; Projectile *projectile_list = NULL;
     /* Load images */
     SDL_Surface *towers[] = {loadImg("towers/Archer_tower"),loadImg("towers/Empty_tower"),loadImg("towers/canon"),loadImg("towers/sorcerer")};
-    SDL_Surface *towers_upgrades[]={loadImg("towers/sorcerer_evolved")};
+    SDL_Surface *towers_upgrades[]={loadImg("towers/sorcerer_evolved"),loadImg("towers/canon_evolved")};
     SDL_Surface *grass_tiles[] = {loadImg("others/grass_tile_a"), loadImg("others/grass_tile_b"), loadImg("others/grass_tile_c"), loadImg("others/grass_tile_d")};
     SDL_Surface *highlighted_tile = loadImg("others/tile_choosed");
     SDL_Surface *delete_tower = loadImg("others/delete");
@@ -1551,9 +1588,16 @@ int main(int argc, char* argv[]) {
             }
             
             else{
-                //if (towertype == SORCERER_TOWER){
-                //    drawImgStatic(rend,towers_upgrades[0],0,0,SPRITE_SIZE/2,SPRITE_SIZE/2,NULL);
-                //}
+            	switch (towerOnTile->type){
+            		case SORCERER_TOWER:
+                    	drawImgStatic(rend,towers_upgrades[0],0,0,SPRITE_SIZE/2,SPRITE_SIZE/2,NULL);
+                    	break;
+                    case CANON:
+                    	drawImgStatic(rend,towers_upgrades[1],0,0,SPRITE_SIZE/2,SPRITE_SIZE/2,NULL);
+                    	break;
+                    default:
+                    	break;
+                }
                 drawImgStatic(rend,delete_tower,WINDOW_WIDTH-(SPRITE_SIZE/2),0,SPRITE_SIZE/2,SPRITE_SIZE/2,NULL);
             }
             drawImgDynamic(rend,highlighted_tile,(selected_tile_pos[0]-1)*TILE_WIDTH,(selected_tile_pos[1]-1)*TILE_HEIGHT,SPRITE_SIZE,SPRITE_SIZE,NULL);
