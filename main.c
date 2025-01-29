@@ -4,8 +4,7 @@
 #include <stdbool.h>
 #include <time.h>
 #include "src/SDL2/include/SDL2/SDL.h"
-#include "src/SDL2/SDL2_ttf/SDL_ttf.h"
-//sudo apt-get install libsdl-ttf2.0-dev
+#include "src/SDL2/include/SDL2/SDL_ttf.h"
 #define FULLSCREEN false   // Set if the game should start on fullscreen (F11 to toggle on/off)
 #define FPS 60             // Game target FPS
 #define NB_ROWS 7          // Number of rows for the map
@@ -384,7 +383,7 @@ bool getEnemyAndTowerAt(Enemy *enemy_list, Tower *tower_list, int collumn, int r
             break;
         }
         enemy_list = enemy_list->next;
-    }	
+    }    
     /* Getting tower */
     while (tower_list) {
         if (tower_list->collumn == collumn && tower_list->row == row) {
@@ -420,22 +419,22 @@ bool addEnemy(Enemy **enemy_list, char enemy_type, int spawn_row, int spawn_coll
     /* Match the enemy type to its stats */
     switch (enemy_type) {
         case SLIME_ENEMY:
-            new_enemy->live_points = 4;
+            new_enemy->live_points = 6;
             new_enemy->base_speed = 3;
             new_enemy->sprite = loadImg("enemies/Slime");
             break;
         case GELLY_ENEMY:
-            new_enemy->live_points = 7;
+            new_enemy->live_points = 10;
             new_enemy->base_speed = 2;
             new_enemy->sprite = loadImg("enemies/Gelly");
             break;
         case GOBLIN_ENEMY:
-            new_enemy->live_points = 6;
+            new_enemy->live_points = 12;
             new_enemy->base_speed = 4;
             new_enemy->sprite = loadImg("enemies/Goblin");
             break;
         case ORC_ENEMY:
-            new_enemy->live_points = 15;
+            new_enemy->live_points = 25;
             new_enemy->base_speed = 1;
             new_enemy->sprite = loadImg("enemies/Orc");
             break;
@@ -709,37 +708,37 @@ Tower *addTower(Tower **tower_list, Enemy *enemy_list, char tower_type, int plac
     new_tower->next = NULL;
     new_tower->anim = newAnim();
     switch (tower_type){
-		case ARCHER_TOWER:
-            new_tower->live_points = 8;
+        case ARCHER_TOWER:
+            new_tower->live_points = 6;
             new_tower->cost = 50;
             new_tower->base_attack_cooldown = 1;
             new_tower->sprite = loadImg("towers/Archer_tower");
             break;
-		case EMPTY_TOWER:
-            new_tower->live_points = 16;
+        case EMPTY_TOWER:
+            new_tower->live_points = 10;
             new_tower->cost = 25;
             new_tower->base_attack_cooldown = 1;
             new_tower->sprite = loadImg("towers/Empty_tower");
             break;
-		case CANON:
-            new_tower->live_points = 5;
-            new_tower->cost = 30;
+        case CANON:
+            new_tower->live_points = 4;
+            new_tower->cost = 100;
             new_tower->base_attack_cooldown = 3;
             new_tower->sprite = loadImg("towers/canon");
             break;
-		case SORCERER_TOWER:
-            new_tower->live_points = 9;
-            new_tower->cost = 80;
+        case SORCERER_TOWER:
+            new_tower->live_points = 5;
+            new_tower->cost = 75;
             new_tower->base_attack_cooldown = 2;
             new_tower->sprite = loadImg("towers/sorcerer");
             break;
         case MAGE_TOWER:
-        	new_tower->live_points=11;
-        	new_tower->cost = 150;
-        	new_tower->base_attack_cooldown=1;
-        	new_tower->sprite = loadImg("towers/sorcerer_evolved");
-        	break;
-		default:  /* Invalid tower type */
+            new_tower->live_points = 7;
+            new_tower->cost = 150;
+            new_tower->base_attack_cooldown = 1;
+            new_tower->sprite = loadImg("towers/sorcerer_evolved");
+            break;
+        default:  /* Invalid tower type */
             printf("[ERROR]    Unknown tower type '%c'\n", tower_type);
             destroyTower(new_tower, tower_list);
             return NULL;
@@ -780,29 +779,29 @@ Tower *buyTower(Tower **tower_list, Enemy *enemy_list, char tower_type, int plac
 
 /* Try to upgrade a tower */
 Tower *upgradeTower(Tower **tower_list, Enemy *enemy_list, char tower_type, int placement_collumn, int placement_row, int *funds) {
-	Tower *old_tower,*new_tower;
-	switch (tower_type){
-		case MAGE_TOWER :
-			getEnemyAndTowerAt(NULL,*tower_list,placement_collumn,placement_row,NULL,&old_tower);
-			destroyTower(old_tower,tower_list);
-			new_tower=addTower(tower_list,enemy_list,MAGE_TOWER,placement_collumn,placement_row);
-			if (*funds < new_tower->cost){
-				destroyTower(new_tower,tower_list);
-				addTower(tower_list,enemy_list,tower_type,placement_collumn,placement_row);
-				return NULL;
-			}
-			*funds-=new_tower->cost;
-			break;
-		default:
-			break;
-	}
-	return new_tower;
+    Tower *old_tower,*new_tower;
+    switch (tower_type){
+        case MAGE_TOWER :
+            getEnemyAndTowerAt(NULL,*tower_list,placement_collumn,placement_row,NULL,&old_tower);
+            destroyTower(old_tower,tower_list);
+            new_tower=addTower(tower_list,enemy_list,MAGE_TOWER,placement_collumn,placement_row);
+            if (*funds < new_tower->cost){
+                destroyTower(new_tower,tower_list);
+                addTower(tower_list,enemy_list,tower_type,placement_collumn,placement_row);
+                return NULL;
+            }
+            *funds-=new_tower->cost;
+            break;
+        default:
+            break;
+    }
+    return new_tower;
 }
 
 //delete the tower and refund the money ( in case of miss click)
 void deleteTower(Tower *tower, Tower **tower_list,int *funds){
-	*funds+=tower->cost;
-	destroyTower(tower,tower_list);
+    *funds+=tower->cost;
+    destroyTower(tower,tower_list);
 }
 
 /* Destroy an tower and free its allocated memory */
@@ -830,26 +829,29 @@ void towerAct(Tower *tower, Tower **tower_list, Enemy *enemy_list, Projectile **
     /* Can only act when action cooldown reaches 0 or less */
     tower->attack_cooldown--;
     if (tower->attack_cooldown <= 0) {
-        tower->attack_cooldown = tower->base_attack_cooldown;
         switch (tower->type) {
             case ARCHER_TOWER:
                 /* Attack the firt enemy on the same row at most 10 tiles away */
                 for (i = 1; i <= 10 && tower->collumn+i <= NB_COLLUMNS; i++) if (getEnemyAndTowerAt(enemy_list, NULL, tower->collumn + i, tower->row, &e, &tmp)) {
+                    tower->attack_cooldown = tower->base_attack_cooldown;
                     addProjectile(projectile_list, tower, e);
                     break;
                 }
-			case EMPTY_TOWER:
-				break;
-			case CANON:
-                /* Attack the firt enemy on the same row at most 10 tiles away */
-                for (i = 1; i <= 10 && tower->collumn+i <= NB_COLLUMNS; i++) if (getEnemyAndTowerAt(enemy_list, NULL, tower->collumn + i, tower->row, &e, &tmp)) {
+                break;
+            case EMPTY_TOWER:
+                break;
+            case CANON:
+                /* Attack the firt enemy on the same row at most 4 tiles away */
+                for (i = 1; i <= 4 && tower->collumn+i <= NB_COLLUMNS; i++) if (getEnemyAndTowerAt(enemy_list, NULL, tower->collumn + i, tower->row, &e, &tmp)) {
+                    tower->attack_cooldown = tower->base_attack_cooldown;
                     addProjectile(projectile_list, tower, e);
                     break;
                 }
-				break;
-			case SORCERER_TOWER:
-                /* Attack the firt enemy on the same row at most 10 tiles away */
-                for (i = 1; i <= 10 && tower->collumn+i <= NB_COLLUMNS; i++) if (getEnemyAndTowerAt(enemy_list, NULL, tower->collumn + i, tower->row, &e, &tmp)) {
+                break;
+            case SORCERER_TOWER:
+                /* Attack the firt enemy on the same row at most 8 tiles away */
+                for (i = 1; i <= 8 && tower->collumn+i <= NB_COLLUMNS; i++) if (getEnemyAndTowerAt(enemy_list, NULL, tower->collumn + i, tower->row, &e, &tmp)) {
+                    tower->attack_cooldown = tower->base_attack_cooldown;
                     addProjectile(projectile_list, tower, e);
                     break;
                 }
@@ -923,19 +925,19 @@ Projectile *addProjectile(Projectile **projectile_list, Tower *origin, Enemy *ta
         /* Shoot by a level 1 archer tower */
         case ARCHER_TOWER:
             new_projectile->sprite = loadImg("projectiles/arrow");
-            projectile_speed = 10.0;
+            projectile_speed = 7.5;
             break;
         case CANON:
-        	new_projectile->sprite = loadImg("projectiles/canon_bullet");
-            projectile_speed = 5.0;
+            new_projectile->sprite = loadImg("projectiles/canon_bullet");
+            projectile_speed = 10.0;
             break;
         case SORCERER_TOWER:
-        	new_projectile->sprite = loadImg("projectiles/magic_orb");
-            projectile_speed = 8.0;
+            new_projectile->sprite = loadImg("projectiles/magic_orb");
+            projectile_speed = 5.0;
             break;
         case MAGE_TOWER:
-        	new_projectile->sprite = loadImg("projectiles/magic_orb");
-            projectile_speed = 8.0;
+            new_projectile->sprite = loadImg("projectiles/magic_orb");
+            projectile_speed = 5.0;
             break;
         /* Shoot by a tower of unknown type */
         default:
@@ -984,6 +986,7 @@ bool hasProjectileReachedTarget(Projectile *projectile) {
 /* Update all projectiles */
 void updateProjectiles(Projectile **projectile_list, Enemy **enemy_list) {
     Projectile *projectile = *projectile_list; Projectile *tmp;
+    bool result;
     while (projectile) {
         /* On target reached */
         if (hasProjectileReachedTarget(projectile)) {
@@ -994,14 +997,16 @@ void updateProjectiles(Projectile **projectile_list, Enemy **enemy_list) {
                     break;
                 case EMPTY_TOWER:
                     break;
-				case CANON:
-					damageEnemy(projectile->target, 1, enemy_list);
+                case CANON:
+                    damageEnemy(projectile->target, 9, enemy_list);
                     break;
-				case SORCERER_TOWER:
-					damageEnemy(projectile->target, 4, enemy_list);
+                case SORCERER_TOWER:
+                    result = damageEnemy(projectile->target, 3, enemy_list);
+                    /* Enemy slowdown on hit */
+                    if (result && projectile->target) projectile->target->speed = min(max(projectile->target->speed - 1, 1), projectile->target->speed);
                     break;
-				case MAGE_TOWER:
-					damageEnemy(projectile->target, 6, enemy_list);
+                case MAGE_TOWER:
+                    damageEnemy(projectile->target, 6, enemy_list);
                     break;               
                 default:  /* Invalid tower type */
                     printf("[ERROR]    Unknown tower type '%c'\n", projectile->origin->type);
@@ -1263,16 +1268,16 @@ void drawRectDynamic(SDL_Renderer *rend, int pos_x, int pos_y, int width, int he
 }
 
 void Write(SDL_Renderer *rend,TTF_Font *font,const char *text,int pos_x,int pos_y, int width,int height,int red,int green,int blue,int alpha){
-	SDL_Color TextColor = {red, green, blue, alpha} ;
-	SDL_Rect dest = {pos_x, pos_y, width, height};
-	SDL_Surface *textRender = TTF_RenderText_Blended(font, text,TextColor);
-	if (!textRender){
-		printf("Error when rendering text surface %s\n",SDL_GetError());
-	}
-	SDL_Texture *textTexture = SDL_CreateTextureFromSurface(rend,textRender);
-	SDL_RenderCopy(rend,textTexture,NULL,&dest);
-	SDL_DestroyTexture(textTexture);
-	SDL_FreeSurface(textRender);
+    SDL_Color TextColor = {red, green, blue, alpha} ;
+    SDL_Rect dest = {pos_x, pos_y, width, height};
+    SDL_Surface *textRender = TTF_RenderText_Blended(font, text,TextColor);
+    if (!textRender){
+        printf("Error when rendering text surface %s\n",SDL_GetError());
+    }
+    SDL_Texture *textTexture = SDL_CreateTextureFromSurface(rend,textRender);
+    SDL_RenderCopy(rend,textTexture,NULL,&dest);
+    SDL_DestroyTexture(textTexture);
+    SDL_FreeSurface(textRender);
 }
 
 
@@ -1285,15 +1290,20 @@ int main(int argc, char* argv[]) {
         printf("Error initializing SDL: %s\n", SDL_GetError());
         return 0;
     }
-	if (TTF_Init() != 0){
-		printf("Error initializing TTF %s\n",SDL_GetError());
-	}
-	TTF_Font *font = TTF_OpenFont("src/fonts/AlmendraRegular.ttf",24);
-	if (!font){
-		printf("Error creating font : %s\n",SDL_GetError());
-		SDL_Quit();
-		return 0;
-	}
+
+    /* Initialize SDL_ttf */
+    if (TTF_Init() != 0){
+        printf("Error initializing TTF %s\n", TTF_GetError());
+    }
+
+    /* Initialize the font */
+    TTF_Font *font = TTF_OpenFont("src/fonts/Almendra-Regular.ttf", 24);
+    if (!font){
+        printf("Error creating font : %s\n", TTF_GetError());
+        SDL_Quit();
+        return 0;
+    }
+
     /* Create a window */
     SDL_Window* wind = SDL_CreateWindow("Game of the year", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, WINDOW_WIDTH, WINDOW_HEIGHT, 0);
     if (!wind) {
@@ -1322,9 +1332,9 @@ int main(int argc, char* argv[]) {
     SDL_Surface *towers[] = {loadImg("towers/Archer_tower"),loadImg("towers/Empty_tower"),loadImg("towers/canon"),loadImg("towers/sorcerer")};
     SDL_Surface *towers_upgrades[]={loadImg("towers/sorcerer_evolved")};
     SDL_Surface *grass_tiles[] = {loadImg("others/grass_tile_a"), loadImg("others/grass_tile_b"), loadImg("others/grass_tile_c"), loadImg("others/grass_tile_d")};
-	SDL_Surface *highlighted_tile = loadImg("others/tile_choosed");
-	SDL_Surface *delete_tower = loadImg("others/delete");
-	char TowersNames[4][MAX_LENGTH_TOWER_NAME]={"Archer Tower 50G","Empty_tower 25G","Canon 30G","Sorcerer tower 80G"};
+    SDL_Surface *highlighted_tile = loadImg("others/tile_choosed");
+    SDL_Surface *delete_tower = loadImg("others/delete");
+    char TowersNames[4][MAX_LENGTH_TOWER_NAME]={"Archer Tower 50G","Empty_tower 25G","Canon 100G","Sorcerer tower 75G"};
     /* Main loop */
     Enemy *currently_acting_enemy = NULL; Tower *currently_acting_tower = NULL;
     int cam_x_speed = 0, cam_y_speed = 0, cam_speed_mult = 0;
@@ -1334,7 +1344,7 @@ int main(int argc, char* argv[]) {
     bool fullscreen = FULLSCREEN;
     SDL_Event event;
     bool running = true;
-	Tower *TowerOnTile;
+    Tower *TowerOnTile;
     int nb_turns=0,funds=0;
     funds+=waves[0]->income;
 
@@ -1525,19 +1535,19 @@ int main(int argc, char* argv[]) {
             drawRect(rend, 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT/4+10, 255, 255, 255, 255);
             
             if (isTileEmpty(NULL,tower_list,selected_tile_pos[0],selected_tile_pos[1])){
-		        for (unsigned long long i = 0; i < sizeof(towers)/sizeof(towers[0]); i++) {
-		            drawImgStatic(rend, towers[i], i*SPRITE_SIZE/2+50, 0, SPRITE_SIZE/2, SPRITE_SIZE/2, NULL);
-		            //Write(rend,font,TowersNames[i],i*SPRITE_SIZE/2,SPRITE_SIZE/2+10,WINDOW_WIDTH/4,WINDOW_HEIGHT/4-SPRITE_SIZE+5,255,255,255,255);
-		            Write(rend,font,TowersNames[i],i*SPRITE_SIZE/2+50,SPRITE_SIZE/2-10,SPRITE_SIZE/2,50,255,255,255,255);
-		        }
-		    }
-		    
-		    else{
-				//if (towertype == SORCERER_TOWER){
-				//	drawImgStatic(rend,towers_upgrades[0],0,0,SPRITE_SIZE/2,SPRITE_SIZE/2,NULL);
-				//}
-				drawImgStatic(rend,delete_tower,WINDOW_WIDTH-(SPRITE_SIZE/2),0,SPRITE_SIZE/2,SPRITE_SIZE/2,NULL);
-		    }
+                for (unsigned long long i = 0; i < sizeof(towers)/sizeof(towers[0]); i++) {
+                    drawImgStatic(rend, towers[i], i*SPRITE_SIZE/2+50, 0, SPRITE_SIZE/2, SPRITE_SIZE/2, NULL);
+                    // Write(rend,font,TowersNames[i],i*SPRITE_SIZE/2,SPRITE_SIZE/2+10,WINDOW_WIDTH/4,WINDOW_HEIGHT/4-SPRITE_SIZE+5,255,255,255,255);
+                    Write(rend,font,TowersNames[i],i*SPRITE_SIZE/2+50,SPRITE_SIZE/2-10,SPRITE_SIZE/2,50,255,255,255,255);
+                }
+            }
+            
+            else{
+                //if (towertype == SORCERER_TOWER){
+                //    drawImgStatic(rend,towers_upgrades[0],0,0,SPRITE_SIZE/2,SPRITE_SIZE/2,NULL);
+                //}
+                drawImgStatic(rend,delete_tower,WINDOW_WIDTH-(SPRITE_SIZE/2),0,SPRITE_SIZE/2,SPRITE_SIZE/2,NULL);
+            }
             drawImgDynamic(rend,highlighted_tile,(selected_tile_pos[0]-1)*TILE_WIDTH,(selected_tile_pos[1]-1)*TILE_HEIGHT,SPRITE_SIZE,SPRITE_SIZE,NULL);
         }
         

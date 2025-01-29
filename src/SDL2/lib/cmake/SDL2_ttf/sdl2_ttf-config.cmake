@@ -8,20 +8,20 @@ set_package_properties(SDL2_ttf PROPERTIES
 
 set(SDL2_ttf_FOUND TRUE)
 
-set(SDL2TTF_HARFBUZZ @TTF_USE_HARFBUZZ@)
+set(SDL2TTF_HARFBUZZ 1)
 set(SDL2TTF_FREETYPE TRUE)
 
-set(SDL2TTF_VENDORED @SDL2TTF_VENDORED@)
+set(SDL2TTF_VENDORED 1)
 
-set(SDL2TTF_SDL2_REQUIRED_VERSION @SDL_VERSION@)
+set(SDL2TTF_SDL2_REQUIRED_VERSION 2.0.10)
 
 get_filename_component(CMAKE_CURRENT_LIST_DIR ${CMAKE_CURRENT_LIST_DIR} REALPATH)
-get_filename_component(prefix "${CMAKE_CURRENT_LIST_DIR}/@cmake_prefix_relpath@" ABSOLUTE)
-set(exec_prefix "@exec_prefix@")
-set(bindir "@bindir@")
-set(includedir "@includedir@")
-set(libdir "@libdir@")
-set(_sdl2ttf_extra_static_libraries "@TTF_LIBS@ @PC_LIBS@")
+get_filename_component(prefix "${CMAKE_CURRENT_LIST_DIR}/../../.." ABSOLUTE)
+set(exec_prefix "${prefix}")
+set(bindir "${prefix}/bin")
+set(includedir "${prefix}/include")
+set(libdir "${prefix}/lib")
+set(_sdl2ttf_extra_static_libraries " -lusp10 -lgdi32 -lrpcrt4  -lusp10 -lgdi32 -lrpcrt4")
 string(STRIP "${_sdl2ttf_extra_static_libraries}" _sdl2ttf_extra_static_libraries)
 
 set(_sdl2ttf_bindir   "${bindir}")
