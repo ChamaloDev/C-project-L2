@@ -17,7 +17,6 @@
 
 #define MAX_LENGTH_TOWER_NAME 20
 
-
 /* Enemy types */
 #define SLIME_ENEMY 'S'
 #define GELLY_ENEMY 'G'
@@ -1297,7 +1296,7 @@ int main(int argc, char* argv[]) {
     }
 
     /* Initialize the font */
-    TTF_Font *font = TTF_OpenFont("src/fonts/Almendra-Regular.ttf", 24);
+    TTF_Font *font = TTF_OpenFont("src/fonts/Almendra-Regular.ttf", 16);
     if (!font){
         printf("Error creating font : %s\n", TTF_GetError());
         SDL_Quit();
@@ -1334,7 +1333,7 @@ int main(int argc, char* argv[]) {
     SDL_Surface *grass_tiles[] = {loadImg("others/grass_tile_a"), loadImg("others/grass_tile_b"), loadImg("others/grass_tile_c"), loadImg("others/grass_tile_d")};
     SDL_Surface *highlighted_tile = loadImg("others/tile_choosed");
     SDL_Surface *delete_tower = loadImg("others/delete");
-    char TowersNames[4][MAX_LENGTH_TOWER_NAME]={"Archer Tower 50G","Empty_tower 25G","Canon 100G","Sorcerer tower 75G"};
+    char TowersNames[4][MAX_LENGTH_TOWER_NAME]={"Archer Tower 50G","Wall 25G","Canon 100G","Sorcerer tower 75G"};
     /* Main loop */
     Enemy *currently_acting_enemy = NULL; Tower *currently_acting_tower = NULL;
     int cam_x_speed = 0, cam_y_speed = 0, cam_speed_mult = 0;
@@ -1460,7 +1459,23 @@ int main(int argc, char* argv[]) {
                                     menu_hidden = true;
                                 }
                             }
+							else if (!isTileEmpty(NULL,tower_list,selected_tile_pos[0],selected_tile_pos[1])){
+                                getEnemyAndTowerAt(NULL,tower_list,selected_tile_pos[0], selected_tile_pos[1],NULL,&TowerOnTile);
+                                if (WINDOW_WIDTH <= event.motion.x && event.motion.x <= WINDOW_WIDTH-SPRITE_SIZE/2 && 0 <= event.motion.y && event.motion.y <= SPRITE_SIZE/2){
+                                    //clicked on the X to destroy the tower and refund the money
+                                    deleteTower(TowerOnTile,&tower_list,&funds);
+                                    menu_hidden = true;
+                                }
+                                else if (0 <= event.motion.x && event.motion.x <= SPRITE_SIZE/2 && 0 <= event.motion.y && event.motion.y <= SPRITE_SIZE/2){
+                                    //clicked on the evolution of the turret
+                                    upgradeTower(&tower_list,enemy_list,TowerOnTile->type,selected_tile_pos[0],selected_tile_pos[1],&funds);
+                                    menu_hidden=true;
+                                }
+                                else{
+                                    menu_hidden = true;
+                                }
 
+                            }
                             /* If menu selected and player clicks on a tower icon, try to buy and place tower (if possible) */
                             else {
                                 /* LVL 1 archer tower */
@@ -1519,7 +1534,7 @@ int main(int argc, char* argv[]) {
         /* Clear screen */
         SDL_SetRenderDrawColor(rend, 0, 0, 0, 255);
         SDL_RenderClear(rend);
-        Write(rend,font,"PROUT",0,0,150,150,255,255,255,255);
+        
         /* Move camera */
         CAM_POS_X += BASE_CAM_SPEED * cam_x_speed * pow(CAM_SPEED_MULT, cam_speed_mult) * pow(1.4142/2, cam_x_speed && cam_y_speed) / CAM_SCALE;
         CAM_POS_Y += BASE_CAM_SPEED * cam_y_speed * pow(CAM_SPEED_MULT, cam_speed_mult) * pow(1.4142/2, cam_x_speed && cam_y_speed) / CAM_SCALE;
@@ -1537,8 +1552,7 @@ int main(int argc, char* argv[]) {
             if (isTileEmpty(NULL,tower_list,selected_tile_pos[0],selected_tile_pos[1])){
                 for (unsigned long long i = 0; i < sizeof(towers)/sizeof(towers[0]); i++) {
                     drawImgStatic(rend, towers[i], i*SPRITE_SIZE/2+50, 0, SPRITE_SIZE/2, SPRITE_SIZE/2, NULL);
-                    // Write(rend,font,TowersNames[i],i*SPRITE_SIZE/2,SPRITE_SIZE/2+10,WINDOW_WIDTH/4,WINDOW_HEIGHT/4-SPRITE_SIZE+5,255,255,255,255);
-                    Write(rend,font,TowersNames[i],i*SPRITE_SIZE/2+50,SPRITE_SIZE/2-10,SPRITE_SIZE/2,50,255,255,255,255);
+                    Write(rend,font,TowersNames[i],i*SPRITE_SIZE/2+50,SPRITE_SIZE/2-10,SPRITE_SIZE/2-10,30,255,255,255,255);
                 }
             }
             
