@@ -3,8 +3,8 @@
 #include <string.h>
 #include <stdbool.h>
 #include <time.h>
-#include "src/SDL2/include/SDL2/SDL.h"
-#include "src/SDL2/include/SDL2/SDL_ttf.h"
+#include <SDL.h>
+#include <SDL_ttf.h>
 #define FULLSCREEN false   // Set if the game should start on fullscreen (F11 to toggle on/off)
 #define ANTI_ALIASING "2"  // Set if the game should use anti aliasing for rendering
 #define FPS 60             // Game target FPS
@@ -1073,10 +1073,10 @@ bool readLine(FILE *file, char ***values, int *nb_values) {
 }
 
 /* Load a level */
-/* File must be located in "./src/lvl/<path>.txt" */
+/* File must be located in "../assets/lvl/<path>.txt" */
 bool loadLevel(const char *path, Wave ***waves, int *nb_waves) {
     /* Openning text file */
-    char *partial_path = concatString("./src/lvl/", path);
+    char *partial_path = concatString("../assets/lvl/", path);
     char *full_path = concatString(partial_path, ".txt");
     FILE *file = fopen(full_path, "r");
     free(partial_path);
@@ -1207,9 +1207,9 @@ void pixelToTile(int *x, int *y) {
 
 
 /* Load an image in bitmap (.bmp) format */
-/* File must be located in "./src/img/<path>.bmp" */
+/* File must be located in "../assets/img/<path>.bmp" */
 SDL_Surface *loadImg(const char *path) {
-    char *partial_path = concatString("./src/img/", path);
+    char *partial_path = concatString("../assets/img/", path);
     char *full_path = concatString(partial_path, ".bmp");
     SDL_Surface *img = SDL_LoadBMP(full_path);
     if (!img) printf("[ERROR]    Bitmap file at \"%s\" not found\n", full_path);
@@ -1295,7 +1295,7 @@ int main(int argc, char* argv[]) {
     }
 
     /* Initialize the font */
-    TTF_Font *font = TTF_OpenFont("src/fonts/Almendra-Regular.ttf", 16);
+    TTF_Font *font = TTF_OpenFont("../assets/fonts/Almendra-Regular.ttf", 16);
     if (!font){
         printf("Error creating font : %s\n", TTF_GetError());
         SDL_Quit();
