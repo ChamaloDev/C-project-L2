@@ -1100,9 +1100,9 @@ bool loadLevel(const char *path, Wave ***waves, int *nb_waves) {
             case 1:
                 (*nb_waves)++;
                 *waves = realloc(*waves, (*nb_waves) * sizeof(Wave *));
-                *waves[*nb_waves - 1] = malloc(sizeof(Wave));
-                (*waves[*nb_waves - 1])->income = stringToInt(values[0]);
-                (*waves[*nb_waves - 1])->enemies = NULL;
+                (*waves)[*nb_waves - 1] = malloc(sizeof(Wave));
+                (*waves)[*nb_waves - 1]->income = stringToInt(values[0]);
+                (*waves)[*nb_waves - 1]->enemies = NULL;
                 break;
             /* Add enemy (int spawn_delay, int row, char type) */
             case 3:
@@ -1112,7 +1112,7 @@ bool loadLevel(const char *path, Wave ***waves, int *nb_waves) {
                     fclose(file);
                     return false;
                 }
-                addEnemy(&((*waves)[*nb_waves - 1]->enemies), *(values[2]), stringToInt(values[1]), NB_COLLUMNS + stringToInt(values[0]));
+                addEnemy(&(*waves)[*nb_waves - 1]->enemies, values[2][0], stringToInt(values[1]), NB_COLLUMNS + stringToInt(values[0]));
                 break;
             /* Invalid value count on line */
             default:
