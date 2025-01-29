@@ -4,7 +4,7 @@
 CC="gcc"
 DFLAGS="-Wall -Wextra"
 CFLAGS="-Iinclude/SDL2 -Iinclude/SDL2_ttf"
-LDFLAGS="-Llib/SDL2 -Llib/SDL2_ttf -lSDL2 -lSDL2_ttf"
+LDFLAGS="-Llib/SDL2 -Llib/SDL2_ttf -lSDL2main -lSDL2_ttf -lSDL2"
 
 SRC="src/*.c"
 OBJ="main.o"
