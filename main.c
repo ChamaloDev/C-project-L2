@@ -6,6 +6,7 @@
 #include "src/SDL2/include/SDL2/SDL.h"
 #include "src/SDL2/include/SDL2/SDL_ttf.h"
 #define FULLSCREEN false   // Set if the game should start on fullscreen (F11 to toggle on/off)
+#define ANTI_ALIASING "2"  // Set if the game should use anti aliasing for rendering
 #define FPS 60             // Game target FPS
 #define NB_ROWS 7          // Number of rows for the map
 #define NB_COLLUMNS 21     // Number of collumns for the map
@@ -157,6 +158,7 @@ bool damageEnemy(Enemy *enemy, int amount, Enemy **enemy_list);
 Tower *addTower(Tower **tower_list, Enemy *enemy_list, char tower_type, int placement_row, int placement_collumn);
 Tower *buyTower(Tower **tower_list, Enemy *enemy_list, char tower_type, int placement_row, int placement_collumn, int *funds);
 void destroyTower(Tower *tower, Tower **tower_list);
+void sellTower(Tower *tower, Tower **tower_list, int *funds);
 void towerAct(Tower *tower, Tower **tower_list, Enemy *enemy_list, Projectile **projectile_list);
 void updateTowers(Tower **currently_acting_tower, Tower **tower_list, Enemy *enemy_list, Projectile **projectile_list);
 void makeAllTowersAct(Tower **tower_list, Tower **currently_acting_tower);
@@ -182,9 +184,8 @@ void drawImgDynamic(SDL_Renderer *rend, SDL_Surface *img, int pos_x, int pos_y, 
 void drawRect(SDL_Renderer *rend, int pos_x, int pos_y, int width, int height, int red, int green, int blue, int alpha);
 void drawFilledRect(SDL_Renderer *rend, int pos_x, int pos_y, int width, int height, int red, int green, int blue, int alpha);
 void freeEverything(Enemy **enemy_list,Tower **tower_list);
-void Write(SDL_Renderer *rend,TTF_Font *font,const char *text,int pos_x,int pos_y, int width,int height,int red,int green,int blue,int alpha);
+void write(SDL_Renderer *rend,TTF_Font *font,const char *text,int pos_x,int pos_y, int width,int height,int red,int green,int blue,int alpha);
 Tower *upgradeTower(Tower **tower_list, Enemy *enemy_list, char tower_type, int placement_collumn, int placement_row, int *funds);
-void deleteTower(Tower *tower, Tower **tower_list,int *funds);
 
 /* Return an integer between a and b (included) */
 int randrange(int a, int b) {
@@ -374,31 +375,29 @@ bool applyAnim(Animation *anim, SDL_Rect *rect) {
 
 /* Get the tower and enemy at a specified position */
 bool getEnemyAndTowerAt(Enemy *enemy_list, Tower *tower_list, int collumn, int row, Enemy **enemy, Tower **tower) {
-    *enemy = NULL; *tower = NULL;
     /* Getting enemy */
     while (enemy_list) {
         if (enemy_list->collumn == collumn && enemy_list->row == row) {
-            *enemy = enemy_list;
             break;
         }
         enemy_list = enemy_list->next;
-    }    
+    }
+    if (enemy) *enemy = enemy_list;
     /* Getting tower */
     while (tower_list) {
         if (tower_list->collumn == collumn && tower_list->row == row) {
-            *tower = tower_list;
             break;
         }
         tower_list = tower_list->next;
     }
+    if (tower) *tower = tower_list;
     /* Return true if an enemy or tower was found, false otherwise (meaning the space is empty) */
-    return (*enemy || *tower);
+    return (enemy_list || tower_list);
 }
 
 /* Return if the specified space is empty */
 bool isTileEmpty(Enemy *enemy_list, Tower *tower_list, int collumn, int row) {
-    Enemy *e; Tower *t;
-    return !getEnemyAndTowerAt(enemy_list, tower_list, collumn, row, &e, &t);
+    return !getEnemyAndTowerAt(enemy_list, tower_list, collumn, row, NULL, NULL);
 }
 
 
@@ -797,12 +796,6 @@ Tower *upgradeTower(Tower **tower_list, Enemy *enemy_list, char tower_type, int 
     return new_tower;
 }
 
-//delete the tower and refund the money ( in case of miss click)
-void deleteTower(Tower *tower, Tower **tower_list,int *funds){
-    *funds+=tower->cost;
-    destroyTower(tower,tower_list);
-}
-
 /* Destroy an tower and free its allocated memory */
 void destroyTower(Tower *tower, Tower **tower_list) {
     if (!tower || !tower_list || !(*tower_list)) return;
@@ -819,6 +812,12 @@ void destroyTower(Tower *tower, Tower **tower_list) {
     if (tower->sprite) delImg(tower->sprite);
     if (tower->anim) destroyAnim(tower->anim);
     free(tower);
+}
+
+/* Sell the tower and refund its cost (in case of miss click) */
+void sellTower(Tower *tower, Tower **tower_list, int *funds){
+    *funds += tower->cost;
+    destroyTower(tower, tower_list);
 }
 
 /* Make a singular tower act */
@@ -1266,7 +1265,7 @@ void drawRectDynamic(SDL_Renderer *rend, int pos_x, int pos_y, int width, int he
     drawRect(rend, rect.x, rect.y, rect.w, rect.h, red, green, blue, alpha);
 }
 
-void Write(SDL_Renderer *rend,TTF_Font *font,const char *text,int pos_x,int pos_y, int width,int height,int red,int green,int blue,int alpha){
+void write(SDL_Renderer *rend,TTF_Font *font,const char *text,int pos_x,int pos_y, int width,int height,int red,int green,int blue,int alpha){
     SDL_Color TextColor = {red, green, blue, alpha} ;
     SDL_Rect dest = {pos_x, pos_y, width, height};
     SDL_Surface *textRender = TTF_RenderText_Blended(font, text,TextColor);
@@ -1320,8 +1319,8 @@ int main(int argc, char* argv[]) {
         SDL_Quit();
         return 0;
     }
-    /* Antialiasing */
-    SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "1");
+    /* Antialiasing, "0" -> "nearest" ; "1" -> "linear" ; "2" -> "best" */
+    SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, ANTI_ALIASING);
 
     // [TEMPORARY]
     Wave **waves; int nb_waves;
@@ -1343,7 +1342,7 @@ int main(int argc, char* argv[]) {
     bool fullscreen = FULLSCREEN;
     SDL_Event event;
     bool running = true;
-    Tower *TowerOnTile;
+    Tower *towerOnTile;
     int nb_turns=0,funds=0;
     funds+=waves[0]->income;
 
@@ -1459,36 +1458,31 @@ int main(int argc, char* argv[]) {
                                     menu_hidden = true;
                                 }
                             }
-							else if (!isTileEmpty(NULL,tower_list,selected_tile_pos[0],selected_tile_pos[1])){
-                                getEnemyAndTowerAt(NULL,tower_list,selected_tile_pos[0], selected_tile_pos[1],NULL,&TowerOnTile);
-                                if (WINDOW_WIDTH <= event.motion.x && event.motion.x <= WINDOW_WIDTH-SPRITE_SIZE/2 && 0 <= event.motion.y && event.motion.y <= SPRITE_SIZE/2){
-                                    //clicked on the X to destroy the tower and refund the money
-                                    deleteTower(TowerOnTile,&tower_list,&funds);
+                            else if (getEnemyAndTowerAt(NULL, tower_list, selected_tile_pos[0], selected_tile_pos[1], NULL, &towerOnTile)){
+                                if (WINDOW_WIDTH-SPRITE_SIZE/2 <= event.button.x && event.button.x <= WINDOW_WIDTH && 0 <= event.button.y && event.button.y <= SPRITE_SIZE/2){
+                                    /* Clicked on the X to destroy the tower and refund the money */
+                                    sellTower(towerOnTile, &tower_list, &funds);
                                     menu_hidden = true;
                                 }
-                                else if (0 <= event.motion.x && event.motion.x <= SPRITE_SIZE/2 && 0 <= event.motion.y && event.motion.y <= SPRITE_SIZE/2){
-                                    //clicked on the evolution of the turret
-                                    upgradeTower(&tower_list,enemy_list,TowerOnTile->type,selected_tile_pos[0],selected_tile_pos[1],&funds);
+                                else if (0 <= event.button.x && event.button.x <= SPRITE_SIZE/2 && 0 <= event.button.y && event.button.y <= SPRITE_SIZE/2){
+                                    /* Clicked on the turret upgrade */
+                                    upgradeTower(&tower_list, enemy_list, towerOnTile->type, selected_tile_pos[0], selected_tile_pos[1], &funds);
                                     menu_hidden=true;
                                 }
-                                else{
-                                    menu_hidden = true;
-                                }
-
                             }
                             /* If menu selected and player clicks on a tower icon, try to buy and place tower (if possible) */
                             else {
                                 /* LVL 1 archer tower */
-                                if (0 <= event.motion.x && event.motion.x <= SPRITE_SIZE/2 && 0 <= event.motion.y && event.motion.y <= SPRITE_SIZE/2) {
+                                if (0 <= event.button.x && event.button.x <= SPRITE_SIZE/2 && 0 <= event.button.y && event.button.y <= SPRITE_SIZE/2) {
                                     if (buyTower(&tower_list, enemy_list, ARCHER_TOWER, selected_tile_pos[0], selected_tile_pos[1], &funds)) menu_hidden = true;
                                 }
-                                else if (SPRITE_SIZE/2 <= event.motion.x && event.motion.x <= 2*SPRITE_SIZE/2 && 0 <= event.motion.y && event.motion.y <= SPRITE_SIZE/2) {
+                                else if (SPRITE_SIZE/2 <= event.button.x && event.button.x <= 2*SPRITE_SIZE/2 && 0 <= event.button.y && event.button.y <= SPRITE_SIZE/2) {
                                     if (buyTower(&tower_list, enemy_list, EMPTY_TOWER, selected_tile_pos[0], selected_tile_pos[1], &funds)) menu_hidden = true;
                                 }
-                                else if (2*SPRITE_SIZE/2 <= event.motion.x && event.motion.x <= 3*SPRITE_SIZE/2 && 0 <= event.motion.y && event.motion.y <= SPRITE_SIZE/2) {
+                                else if (2*SPRITE_SIZE/2 <= event.button.x && event.button.x <= 3*SPRITE_SIZE/2 && 0 <= event.button.y && event.button.y <= SPRITE_SIZE/2) {
                                     if (buyTower(&tower_list, enemy_list, CANON, selected_tile_pos[0], selected_tile_pos[1], &funds)) menu_hidden = true;
                                 }
-                                else if (3*SPRITE_SIZE/2 <= event.motion.x && event.motion.x <= 4*SPRITE_SIZE/2 && 0 <= event.motion.y && event.motion.y <= SPRITE_SIZE/2) {
+                                else if (3*SPRITE_SIZE/2 <= event.button.x && event.button.x <= 4*SPRITE_SIZE/2 && 0 <= event.button.y && event.button.y <= SPRITE_SIZE/2) {
                                     if (buyTower(&tower_list, enemy_list, SORCERER_TOWER, selected_tile_pos[0], selected_tile_pos[1], &funds)) menu_hidden = true;
                                 }
                             }
@@ -1552,7 +1546,7 @@ int main(int argc, char* argv[]) {
             if (isTileEmpty(NULL,tower_list,selected_tile_pos[0],selected_tile_pos[1])){
                 for (unsigned long long i = 0; i < sizeof(towers)/sizeof(towers[0]); i++) {
                     drawImgStatic(rend, towers[i], i*SPRITE_SIZE/2+50, 0, SPRITE_SIZE/2, SPRITE_SIZE/2, NULL);
-                    Write(rend,font,TowersNames[i],i*SPRITE_SIZE/2+50,SPRITE_SIZE/2-10,SPRITE_SIZE/2-10,30,255,255,255,255);
+                    write(rend,font,TowersNames[i],i*SPRITE_SIZE/2+50,SPRITE_SIZE/2-10,SPRITE_SIZE/2-10,30,255,255,255,255);
                 }
             }
             
