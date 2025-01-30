@@ -890,8 +890,8 @@ void towerAct(Tower *tower, Tower **tower_list, Enemy *enemy_list, Projectile **
                 }
                 break;
             case DESTROYER_TOWER:
-                /* Attack the firt enemy on the same row at most 4 tiles away */
-                for (i = 1; i <= 4 && tower->collumn+i <= NB_COLLUMNS; i++) if (getEnemyAndTowerAt(enemy_list, NULL, tower->collumn + i, tower->row, &target, NULL)) {
+                /* Attack the firt enemy on the same row at most 5 tiles away */
+                for (i = 1; i <= 5 && tower->collumn+i <= NB_COLLUMNS; i++) if (getEnemyAndTowerAt(enemy_list, NULL, tower->collumn + i, tower->row, &target, NULL)) {
                     tower->attack_cooldown = tower->base_attack_cooldown;
                     addProjectile(projectile_list, tower, target);
                     break;
@@ -1030,6 +1030,7 @@ bool hasProjectileReachedTarget(Projectile *projectile) {
 /* Update all projectiles */
 void updateProjectiles(Projectile **projectile_list, Enemy **enemy_list) {
     Projectile *projectile = *projectile_list; Projectile *tmp;
+    Enemy *enemy;
     bool result;
     while (projectile) {
         /* On target reached */
@@ -1056,6 +1057,10 @@ void updateProjectiles(Projectile **projectile_list, Enemy **enemy_list) {
                     break;
                 case DESTROYER_TOWER:
                     damageEnemy(projectile->target, 10, enemy_list);
+                    /* Area damage */
+                    for (int dy = -1; dy <= 1; dy++) for (int dx = -1; dx <= 1; dx++) if (dx || dy)
+                        if (getEnemyAndTowerAt(*enemy_list, NULL, projectile->target->collumn + dx, projectile->target->row + dy, &enemy, NULL))
+                            damageEnemy(enemy, 4, enemy_list);
                     break;
                 default:  /* Invalid tower type */
                     printf("[ERROR]    Unknown tower type '%c'\n", projectile->origin->type);
