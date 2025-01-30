@@ -153,10 +153,9 @@ bool applyAnim(Animation *anim, SDL_Rect *rect);
 bool getEnemyAndTowerAt(Enemy *enemy_list, Tower *tower_list, int collumn, int row, Enemy **enemy, Tower **tower);
 bool isTileEmpty(Enemy *enemy_list, Tower *tower_list, int collumn, int row);
 bool doesTileExist(int collumn, int row);
-Enemy *addEnemy(Enemy **enemy_list, char enemy_type, int spawn_row, int spawn_collumn);
+Enemy *addEnemy(Enemy **enemy_list, char enemy_type, int spawn_collumn, int spawn_row);
 void destroyEnemy(Enemy *enemy, Enemy **enemy_list);
 Enemy **getFirstEnemyOfAllRows(Enemy *enemy_list);
-Enemy **getEnemyInCollumn(Enemy *enemy_list, int collumn_nb);
 Enemy *getFirstEnemyInRow(Enemy *enemy_list, int row);
 int moveEnemy(Enemy *enemy, Enemy *enemy_list, Tower *tower_list, int delta, char axis);
 void makeAllEnemiesMove(Enemy *enemy_list, Tower *tower_list);
@@ -300,10 +299,10 @@ void setAnimIdle(Animation *anim) {
 
 /* Set animation to hurt */
 void setAnimHurt(Animation *anim) {
-    setAnim(anim, HURT_ANIMATION, 1000, NULL);
+    setAnim(anim, HURT_ANIMATION, 500, NULL);
 }
 
-/* Set animation to dead */
+/* Set animation to dead (TODO!) */
 void setAnimDead(Animation *anim) {
     setAnim(anim, DEAD_ANIMATION, 1000, NULL);
 }
@@ -319,7 +318,7 @@ void setAnimAttack(Animation *anim, int side) {
 void setAnimMove(Animation *anim, int dx, int dy) {
     int *data = malloc(2 * sizeof(int));
     data[0] = dx; data[1] = dy;
-    setAnim(anim, MOVE_ANIMATION, 2000, data);
+    setAnim(anim, MOVE_ANIMATION, 1500, data);
 }
 
 /* Set animation to projectile, goes from tile (x1 y1) to tile (x2 y2) at speed tile per second */
@@ -347,19 +346,19 @@ bool applyAnim(Animation *anim, SDL_Rect *rect) {
         /* Hurt animation (shake horizontaly) */
         case HURT_ANIMATION:
             var_a = (CURRENT_TICK - anim->start_tick) / (double) anim->length;
-            var_b = periodicFunction(var_a*1000.0 * 6.0) / 20.0 - 1.0/40.0;
+            var_b = periodicFunction(var_a*1000.0 * 3.0) / 15.0 - 1.0/30.0;
             rect->x -= rect->w * var_b;
             break;
         /* Attack animation (quickly move horizontaly) */
         case ATTACK_ANIMATION:
             var_a = (CURRENT_TICK - anim->start_tick) / (double) anim->length;
-            var_b = periodicFunction(var_a*1000.0) / 5.0;
+            var_b = periodicFunction(var_a*1000.0) / 2.5;
             rect->x += rect->w * var_b * anim->data[0];
             break;
         /* Movement animation (go to destination by doing small jumps) */
         case MOVE_ANIMATION:
             var_a = (CURRENT_TICK - anim->start_tick) / (double) anim->length;
-            var_b = periodicFunction((CURRENT_TICK - anim->start_tick) * 3.0) / 20.0;
+            var_b = periodicFunction((CURRENT_TICK - anim->start_tick) * 4.0) / 15.0;
             rect->x -= anim->data[0] * (1.0-var_a) * TILE_WIDTH;
             rect->y -= anim->data[1] * (1.0-var_a) * TILE_HEIGHT + var_b * TILE_HEIGHT;
             break;
@@ -417,7 +416,7 @@ bool doesTileExist(int collumn, int row) {
 
 
 /* Add an enemy to the list of enemies, fail if cannot spawn enemy at specified location or if enemy type is not defined */
-Enemy *addEnemy(Enemy **enemy_list, char enemy_type, int spawn_row, int spawn_collumn) {
+Enemy *addEnemy(Enemy **enemy_list, char enemy_type, int spawn_collumn, int spawn_row) {
     /* Can't summon enemies in not existing rows */
     if (1 > spawn_row || spawn_row > NB_ROWS) return NULL;
 
@@ -524,20 +523,6 @@ Enemy **getFirstEnemyOfAllRows(Enemy *enemy_list) {
         enemy = enemy->next;
     }
     return first_of_each_row;
-}
-
-/* Get an array containing the enemy in a collumn */
-Enemy **getEnemyInCollumn(Enemy *enemy_list, int collumn_nb) {
-    /* Initializing to NULL */
-    Enemy **enemy_collumn = malloc(NB_ROWS * sizeof(Enemy *));
-    for (int row_nb = 1; row_nb <= NB_ROWS; row_nb++) enemy_collumn[row_nb-1] = NULL;
-    /* Go trough all enemies */
-    Enemy *enemy = enemy_list;
-    while (enemy) {
-        if (enemy->collumn == collumn_nb) enemy_collumn[enemy->row-1] = enemy;
-        enemy = enemy->next;
-    }
-    return enemy_collumn;
 }
 
 /* Get the first enemy of a row */
@@ -733,13 +718,13 @@ bool damageEnemy(Enemy *enemy, int amount, Enemy **enemy_list, Tower *tower_list
         /* Gelly splits into 2 slimes on death, one above and one bellow + one at current position or behind if a slime spawn position is blocked */
         if (n == GELLY_ENEMY) {
             n = 2;
-            if (n-- && (e = addEnemy(enemy_list, SLIME_ENEMY, y - 1, x))) setAnimMove(e->anim, 0, -1);
+            if (n-- && (e = addEnemy(enemy_list, SLIME_ENEMY, x, y - 1))) setAnimMove(e->anim, 0, -1);
             else n++;
-            if (n-- && (e = addEnemy(enemy_list, SLIME_ENEMY, y + 1, x))) setAnimMove(e->anim, 0, +1);
+            if (n-- && (e = addEnemy(enemy_list, SLIME_ENEMY, x, y + 1))) setAnimMove(e->anim, 0, +1);
             else n++;
-            if (n-- && (e = addEnemy(enemy_list, SLIME_ENEMY, y, x + 1))) setAnimMove(e->anim, +1, 0);
+            if (n-- && (e = addEnemy(enemy_list, SLIME_ENEMY, x + 1, y))) setAnimMove(e->anim, +1, 0);
             else n++;
-            if (n-- && (e = addEnemy(enemy_list, SLIME_ENEMY, y, x)));
+            if (n-- && (e = addEnemy(enemy_list, SLIME_ENEMY, x, y)));
             else n++;
             return true;
         }
@@ -1046,23 +1031,23 @@ Projectile *addProjectile(Projectile **projectile_list, Tower *origin, Enemy *ta
         /* Shoot by a level 1 archer tower */
         case ARCHER_TOWER:
             new_projectile->sprite = loadImg("projectiles/arrow");
-            projectile_speed = 10.0;
+            projectile_speed = 15.0;
             break;
         case CANON_TOWER:
             new_projectile->sprite = loadImg("projectiles/canon_bullet");
-            projectile_speed = 15.0;
+            projectile_speed = 20.0;
             break;
         case SORCERER_TOWER:
             new_projectile->sprite = loadImg("projectiles/magic_orb");
-            projectile_speed = 7.5;
+            projectile_speed = 10.0;
             break;
         case MAGE_TOWER:
             new_projectile->sprite = loadImg("projectiles/magic_orb");
-            projectile_speed = 7.5;
+            projectile_speed = 10.0;
             break;
         case DESTROYER_TOWER:
             new_projectile->sprite = loadImg("projectiles/destroyer_bullet");
-            projectile_speed = 15.0;
+            projectile_speed = 20.0;
             break;
         default:  /* Shoot by a tower of unknown type */
             printf("[ERROR]    Unknown tower type '%c'\n", origin->type);
@@ -1246,7 +1231,7 @@ bool loadLevel(const char *path, Wave ***waves, int *nb_waves) {
                     fclose(file);
                     return false;
                 }
-                addEnemy(&(*waves)[*nb_waves - 1]->enemies, values[2][0], stringToInt(values[1]), NB_COLLUMNS + stringToInt(values[0]));
+                addEnemy(&(*waves)[*nb_waves - 1]->enemies, values[2][0], NB_COLLUMNS + stringToInt(values[0]), stringToInt(values[1]));
                 break;
             /* Invalid value count on line */
             default:
