@@ -419,6 +419,7 @@ bool doesTileExist(int collumn, int row) {
 
 /* Add an enemy to the list of enemies, fail if cannot spawn enemy at specified location or if enemy type is not defined */
 Enemy *addEnemy(Enemy **enemy_list, char enemy_type, int spawn_collumn, int spawn_row) {
+    if (!enemy_list) return NULL;
     /* Can't summon enemies in not existing rows */
     if (1 > spawn_row || spawn_row > NB_ROWS) return NULL;
 
@@ -504,9 +505,9 @@ void destroyEnemy(Enemy *enemy, Enemy **enemy_list) {
     else {
         while (prev_enemy && prev_enemy->next != enemy) prev_enemy = prev_enemy->next;
         if (prev_enemy) prev_enemy->next = enemy->next;
-        if (enemy->prev_on_row) enemy->prev_on_row->next_on_row = enemy->next_on_row;
-        if (enemy->next_on_row) enemy->next_on_row->prev_on_row = enemy->prev_on_row;
     }
+    if (enemy->prev_on_row) enemy->prev_on_row->next_on_row = enemy->next_on_row;
+    if (enemy->next_on_row) enemy->next_on_row->prev_on_row = enemy->prev_on_row;
     /* Destroy enemy data */
     if (enemy->sprite) delImg(enemy->sprite);
     if (enemy->anim) destroyAnim(enemy->anim);
@@ -579,6 +580,9 @@ int moveEnemy(Enemy *enemy, Enemy *enemy_list, Tower *tower_list, int delta, cha
             }
             enemy = enemy->next;
         }
+        /* Updating pointers */
+        if (enemy->prev_on_row) enemy->prev_on_row->next_on_row = enemy->next_on_row;
+        if (enemy->next_on_row) enemy->next_on_row->prev_on_row = enemy->prev_on_row;
         return delta;
     }
 
@@ -1018,12 +1022,17 @@ void updateTowers(Tower **currently_acting_tower, Tower **tower_list, Enemy *ene
     //     }
     //     tower = tower->next;
     // }
-    Enemy *e;
+    Enemy *e; Tower *t;
     while (currently_acting_tower && *currently_acting_tower && projectile_list && !(*projectile_list)) {
         e = enemy_list;
         while (e) {
             if (e->anim && e->anim->type != IDLE_ANIMATION) return;
             e = e->next;
+        }
+        t = *tower_list;
+        while (t) {
+            if (t->anim && t->anim->type != IDLE_ANIMATION) return;
+            t = t->next;
         }
         towerAct(*currently_acting_tower, tower_list, enemy_list, projectile_list);
         *currently_acting_tower = (*currently_acting_tower)->next;
