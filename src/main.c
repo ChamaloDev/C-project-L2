@@ -561,31 +561,23 @@ int moveEnemy(Enemy *enemy, Enemy *enemy_list, Tower *tower_list, int delta, cha
         /* Updating pointers */
         if (enemy->next_on_row) enemy->next_on_row->prev_on_row = enemy->prev_on_row;
         if (enemy->prev_on_row) enemy->prev_on_row->next_on_row = enemy->next_on_row;
-        /* Moving on the y axis */
-        Enemy *first_of_row = getFirstEnemyInRow(enemy_list, enemy->row + delta);
+        enemy->prev_on_row = NULL;
+        enemy->next_on_row = NULL;
         enemy->row += delta;
-        /* Getting the first enemy in front of the moved one to update pointers properly */
-        while (first_of_row && first_of_row->next_on_row && first_of_row->next_on_row->collumn < enemy->collumn) first_of_row = first_of_row->next_on_row;
-        /* If there is at least 1 enemy on the row */
-        if (first_of_row) {
-            /* If there is at least 1 enemy ahead of the enemy that moved */
-            if (first_of_row->collumn < enemy->collumn) {
-                enemy->prev_on_row = first_of_row;
-                enemy->next_on_row = first_of_row->next_on_row;
-                if (first_of_row->next_on_row) first_of_row->next_on_row->prev_on_row = enemy;
-                first_of_row->next_on_row = enemy;
+        /* Moving on the y axis */
+        Enemy *current = enemy_list;
+        while (current) {
+            if (current->row == enemy->row) {
+                /* Enemy located on the same row and in front of this new enemy (to the left) */
+                if (current->collumn < enemy->collumn) {
+                    if (!enemy->prev_on_row || enemy->prev_on_row->collumn < current->collumn) enemy->prev_on_row = current;
+                }
+                /* Enemy located on the same row and behind this new enemy (to the right) */
+                else if (current->collumn > enemy->collumn) {
+                    if (!enemy->next_on_row || enemy->next_on_row->collumn > current->collumn) enemy->next_on_row = current;
+                }
             }
-            /* If there is no enemy ahead of the enemy that moved */
-            else {
-                enemy->prev_on_row = NULL;
-                enemy->next_on_row = first_of_row;
-                first_of_row->prev_on_row = enemy;
-            }
-        }
-        /* If there is no enemy on the row */
-        else {
-            enemy->prev_on_row = NULL;
-            enemy->next_on_row = NULL;
+            enemy = enemy->next;
         }
         return delta;
     }
@@ -720,13 +712,13 @@ bool damageEnemy(Enemy *enemy, int amount, Enemy **enemy_list, Tower *tower_list
         /* Gelly splits into 2 slimes on death, one above and one bellow + one at current position or behind if a slime spawn position is blocked */
         if (n == GELLY_ENEMY) {
             n = 2;
-            if (n-- && isTileEmpty(*enemy_list, tower_list, x, y - 1) && doesTileExist(x, y - 1) && (e = addEnemy(enemy_list, SLIME_ENEMY, x, y - 1))) {setAnimMove(e->anim, 0, -1); e->speed = 0;}
+            if (n-- && isTileEmpty(*enemy_list, tower_list, x, y - 1) && doesTileExist(x, y - 1) && (e = addEnemy(enemy_list, SLIME_ENEMY, x, y - 1))) {setAnimMove(e->anim, 0, -1); e->speed = 2;}
             else n++;
-            if (n-- && isTileEmpty(*enemy_list, tower_list, x, y + 1) && doesTileExist(x, y + 1) && (e = addEnemy(enemy_list, SLIME_ENEMY, x, y + 1))) {setAnimMove(e->anim, 0, +1); e->speed = 0;}
+            if (n-- && isTileEmpty(*enemy_list, tower_list, x, y + 1) && doesTileExist(x, y + 1) && (e = addEnemy(enemy_list, SLIME_ENEMY, x, y + 1))) {setAnimMove(e->anim, 0, +1); e->speed = 2;}
             else n++;
-            if (n-- && isTileEmpty(*enemy_list, tower_list, x + 1, y) && doesTileExist(x + 1, y) && (e = addEnemy(enemy_list, SLIME_ENEMY, x + 1, y))) {setAnimMove(e->anim, +1, 0); e->speed = 0;}
+            if (n-- && isTileEmpty(*enemy_list, tower_list, x + 1, y) && doesTileExist(x + 1, y) && (e = addEnemy(enemy_list, SLIME_ENEMY, x + 1, y))) {setAnimMove(e->anim, +1, 0); e->speed = 2;}
             else n++;
-            if (n-- && isTileEmpty(*enemy_list, tower_list, x, y) && doesTileExist(x, y) && (e = addEnemy(enemy_list, SLIME_ENEMY, x, y))) {e->speed = 0;}
+            if (n-- && isTileEmpty(*enemy_list, tower_list, x, y) && doesTileExist(x, y) && (e = addEnemy(enemy_list, SLIME_ENEMY, x, y))) {e->speed = 2;}
             else n++;
             return true;
         }
