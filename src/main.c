@@ -55,7 +55,7 @@ int WINDOW_WIDTH = 1280;
 int WINDOW_HEIGHT = 720;
 
 /* Data of the camera */
-double CAM_SCALE = 0.225;
+double CAM_SCALE = 0.325;
 double CAM_POS_X = (NB_COLLUMNS*TILE_WIDTH)/2;
 double CAM_POS_Y = (NB_ROWS*TILE_HEIGHT)/2;
 
@@ -994,12 +994,12 @@ void towerAct(Tower *tower, Tower **tower_list, Enemy *enemy_list, Projectile **
                     addProjectile(projectile_list, tower, target);
                     break;
                 }
-                for (i = 1; i <= 7; i++) if (doesTileExist(tower->collumn + i, tower->row) && getEnemyAndTowerAt(enemy_list, NULL, tower->collumn + i, tower->row, &target, NULL)) {
+                for (i = 1; i <= 7; i++) if (doesTileExist(tower->collumn + i, tower->row - 1) && getEnemyAndTowerAt(enemy_list, NULL, tower->collumn + i, tower->row - 1, &target, NULL)) {
                     tower->attack_cooldown = tower->base_attack_cooldown;
                     addProjectile(projectile_list, tower, target);
                     break;
                 }
-                for (i = 1; i <= 7; i++) if (doesTileExist(tower->collumn + i, tower->row) && getEnemyAndTowerAt(enemy_list, NULL, tower->collumn + i, tower->row, &target, NULL)) {
+                for (i = 1; i <= 7; i++) if (doesTileExist(tower->collumn + i, tower->row + 1) && getEnemyAndTowerAt(enemy_list, NULL, tower->collumn + i, tower->row + 1, &target, NULL)) {
                     tower->attack_cooldown = tower->base_attack_cooldown;
                     addProjectile(projectile_list, tower, target);
                     break;
