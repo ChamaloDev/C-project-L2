@@ -2,7 +2,6 @@
 
 rem Set variables
 set CC=gcc
-set DFLAGS=-Wall -Wextra
 set CFLAGS=-Iinclude\SDL2 -Iinclude\SDL2_ttf
 set LDFLAGS=-Llib\SDL2 -Llib\SDL2_ttf -lmingw32 -lSDL2main -lSDL2_ttf -lSDL2
 
@@ -14,7 +13,7 @@ rem Create bin directory if it doesn't exist
 if not exist bin mkdir bin
 
 rem Compile source files into object files
-%CC% %DFLAGS% %CFLAGS% -c %SRC% -o %OBJ%
+%CC% -std=c17 -Wall -Wextra %CFLAGS% -c %SRC% -o %OBJ%
 rem Link object files into the executable
 %CC% -o bin\%EXEC% %OBJ% %LDFLAGS%
 rem Remove the object file

@@ -1,24 +1,13 @@
 #!/bin/bash
 
 # Set variables
-CC="gcc"
-DFLAGS="-Wall -Wextra"
-CFLAGS="-Iinclude/SDL2 -Iinclude/SDL2_ttf"
-LDFLAGS="-Llib/SDL2 -Llib/SDL2_ttf -lSDL2main -lSDL2_ttf -lSDL2"
-
-SRC="src/*.c"
-OBJ="main.o"
 EXEC="game"
 
 # Create bin directory if it doesn't exist
 mkdir -p bin
 
-# Compile source files into object files
-$CC $DFLAGS $CFLAGS -c $SRC -o $OBJ
-# Link object files into the executable
-$CC -o bin/$EXEC $OBJ $LDFLAGS
-# Remove the object file
-rm $OBJ
+# Compiling code
+gcc -std=c17 src/*.c -Wall -Wextra -o bin/$EXEC $(sdl2-config --cflags --libs) -lSDL2_ttf
 
 # Change to the bin directory
 cd bin
