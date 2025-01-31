@@ -2,7 +2,7 @@
 
 rem Set variables
 set CC=gcc
-set CFLAGS=-Iinclude\Windows\SDL2 -Iinclude\Windows\SDL2_ttf
+set CFLAGS=-Iinclude\SDL2 -Iinclude\SDL2_ttf
 set LDFLAGS=-Llib\SDL2 -Llib\SDL2_ttf -lmingw32 -lSDL2main -lSDL2_ttf -lSDL2
 
 set SRC=src\*.c
