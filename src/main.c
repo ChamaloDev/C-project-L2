@@ -712,13 +712,13 @@ bool damageEnemy(Enemy *enemy, int amount, Enemy **enemy_list, Tower *tower_list
         /* Gelly splits into 2 slimes on death, one above and one bellow + one at current position or behind if a slime spawn position is blocked */
         if (n == GELLY_ENEMY) {
             n = 2;
-            if (n-- && isTileEmpty(*enemy_list, tower_list, x, y - 1) && doesTileExist(x, y - 1) && (e = addEnemy(enemy_list, SLIME_ENEMY, x, y - 1))) {setAnimMove(e->anim, 0, -1); e->speed = 2;}
+            if (n-- && isTileEmpty(*enemy_list, tower_list, x, y - 1) && doesTileExist(x, y - 1) && (e = addEnemy(enemy_list, SLIME_ENEMY, x, y - 1))) setAnimMove(e->anim, 0, -1);
             else n++;
-            if (n-- && isTileEmpty(*enemy_list, tower_list, x, y + 1) && doesTileExist(x, y + 1) && (e = addEnemy(enemy_list, SLIME_ENEMY, x, y + 1))) {setAnimMove(e->anim, 0, +1); e->speed = 2;}
+            if (n-- && isTileEmpty(*enemy_list, tower_list, x, y + 1) && doesTileExist(x, y + 1) && (e = addEnemy(enemy_list, SLIME_ENEMY, x, y + 1))) setAnimMove(e->anim, 0, +1);
             else n++;
-            if (n-- && isTileEmpty(*enemy_list, tower_list, x + 1, y) && doesTileExist(x + 1, y) && (e = addEnemy(enemy_list, SLIME_ENEMY, x + 1, y))) {setAnimMove(e->anim, +1, 0); e->speed = 2;}
+            if (n-- && isTileEmpty(*enemy_list, tower_list, x + 1, y) && doesTileExist(x + 1, y) && (e = addEnemy(enemy_list, SLIME_ENEMY, x + 1, y))) setAnimMove(e->anim, +1, 0);
             else n++;
-            if (n-- && isTileEmpty(*enemy_list, tower_list, x, y) && doesTileExist(x, y) && (e = addEnemy(enemy_list, SLIME_ENEMY, x, y))) {e->speed = 2;}
+            if (n-- && isTileEmpty(*enemy_list, tower_list, x, y) && doesTileExist(x, y) && (e = addEnemy(enemy_list, SLIME_ENEMY, x, y)));
             else n++;
             return true;
         }
