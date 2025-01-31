@@ -720,13 +720,13 @@ bool damageEnemy(Enemy *enemy, int amount, Enemy **enemy_list, Tower *tower_list
         /* Gelly splits into 2 slimes on death, one above and one bellow + one at current position or behind if a slime spawn position is blocked */
         if (n == GELLY_ENEMY) {
             n = 2;
-            if (n-- && (e = addEnemy(enemy_list, SLIME_ENEMY, x, y - 1))) setAnimMove(e->anim, 0, -1);
+            if (n-- && isTileEmpty(*enemy_list, tower_list, x, y - 1) && doesTileExist(x, y - 1) && (e = addEnemy(enemy_list, SLIME_ENEMY, x, y - 1))) {setAnimMove(e->anim, 0, -1); e->speed = 0;}
             else n++;
-            if (n-- && (e = addEnemy(enemy_list, SLIME_ENEMY, x, y + 1))) setAnimMove(e->anim, 0, +1);
+            if (n-- && isTileEmpty(*enemy_list, tower_list, x, y + 1) && doesTileExist(x, y + 1) && (e = addEnemy(enemy_list, SLIME_ENEMY, x, y + 1))) {setAnimMove(e->anim, 0, +1); e->speed = 0;}
             else n++;
-            if (n-- && (e = addEnemy(enemy_list, SLIME_ENEMY, x + 1, y))) setAnimMove(e->anim, +1, 0);
+            if (n-- && isTileEmpty(*enemy_list, tower_list, x + 1, y) && doesTileExist(x + 1, y) && (e = addEnemy(enemy_list, SLIME_ENEMY, x + 1, y))) {setAnimMove(e->anim, +1, 0); e->speed = 0;}
             else n++;
-            if (n-- && (e = addEnemy(enemy_list, SLIME_ENEMY, x, y)));
+            if (n-- && isTileEmpty(*enemy_list, tower_list, x, y) && doesTileExist(x, y) && (e = addEnemy(enemy_list, SLIME_ENEMY, x, y))) {e->speed = 0;}
             else n++;
             return true;
         }
@@ -942,10 +942,11 @@ void towerAct(Tower *tower, Tower **tower_list, Enemy *enemy_list, Projectile **
                 break;
             case BARRACK_TOWER:
                 tower->attack_cooldown = tower->base_attack_cooldown;
-                if ((tmp = addTower(tower_list, enemy_list, SOLIDER_TOWER, tower->collumn, tower->row - 1)));
-                else if ((tmp = addTower(tower_list, enemy_list, SOLIDER_TOWER, tower->collumn, tower->row + 1)));
-                else if ((tmp = addTower(tower_list, enemy_list, SOLIDER_TOWER, tower->collumn + 1, tower->row)));
-                else if ((tmp = addTower(tower_list, enemy_list, SOLIDER_TOWER, tower->collumn - 1, tower->row)));
+                tmp = NULL;
+                if (isTileEmpty(enemy_list, *tower_list, tower->collumn, tower->row - 1) && doesTileExist(tower->collumn, tower->row - 1) && (tmp = addTower(tower_list, enemy_list, SOLIDER_TOWER, tower->collumn, tower->row - 1)));
+                else if (isTileEmpty(enemy_list, *tower_list, tower->collumn, tower->row + 1) && doesTileExist(tower->collumn, tower->row + 1) && (tmp = addTower(tower_list, enemy_list, SOLIDER_TOWER, tower->collumn, tower->row + 1)));
+                else if (isTileEmpty(enemy_list, *tower_list, tower->collumn + 1, tower->row) && doesTileExist(tower->collumn + 1, tower->row) && (tmp = addTower(tower_list, enemy_list, SOLIDER_TOWER, tower->collumn + 1, tower->row)));
+                else if (isTileEmpty(enemy_list, *tower_list, tower->collumn - 1, tower->row) && doesTileExist(tower->collumn- 1, tower->row ) && (tmp = addTower(tower_list, enemy_list, SOLIDER_TOWER, tower->collumn - 1, tower->row)));
                 else tower->attack_cooldown = 1;
                 if (tmp) setAnimMove(tmp->anim, tmp->collumn - tower->collumn, tmp->row - tower->row);
                 break;
