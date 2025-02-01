@@ -2032,17 +2032,20 @@ int main(int argc, char* argv[]) {
                             }
                             /* If menu selected and player clicks on a tower icon, try to buy and place tower (if possible) */
                             else {
-                                /* LVL 1 archer tower */
-                                if (0 <= event.button.x && event.button.x <= SPRITE_SIZE/2 && 0 <= event.button.y && event.button.y <= SPRITE_SIZE/2) {
+                                //archer tower
+                                if (50 <= event.button.x && event.button.x <= SPRITE_SIZE/2+50 && 0 <= event.button.y && event.button.y <= SPRITE_SIZE/2) {
                                     if (buyTower(&tower_list, enemy_list, ARCHER_TOWER, selected_tile_pos[0], selected_tile_pos[1], &funds)) menu_hidden = true;
                                 }
-                                else if (SPRITE_SIZE/2 <= event.button.x && event.button.x <= 2*SPRITE_SIZE/2 && 0 <= event.button.y && event.button.y <= SPRITE_SIZE/2) {
+                                // wall tower
+                                else if (SPRITE_SIZE/2+50 <= event.button.x && event.button.x <= 2*SPRITE_SIZE/2 +50 && 0 <= event.button.y && event.button.y <= SPRITE_SIZE/2) {
                                     if (buyTower(&tower_list, enemy_list, WALL_TOWER, selected_tile_pos[0], selected_tile_pos[1], &funds)) menu_hidden = true;
                                 }
-                                else if (2*SPRITE_SIZE/2 <= event.button.x && event.button.x <= 3*SPRITE_SIZE/2 && 0 <= event.button.y && event.button.y <= SPRITE_SIZE/2) {
+                                // cannon tower
+                                else if (2*SPRITE_SIZE/2 +50 <= event.button.x && event.button.x <= 50+3*SPRITE_SIZE/2 && 0 <= event.button.y && event.button.y <= SPRITE_SIZE/2) {
                                     if (buyTower(&tower_list, enemy_list, CANON_TOWER, selected_tile_pos[0], selected_tile_pos[1], &funds)) menu_hidden = true;
                                 }
-                                else if (3*SPRITE_SIZE/2 <= event.button.x && event.button.x <= 4*SPRITE_SIZE/2 && 0 <= event.button.y && event.button.y <= SPRITE_SIZE/2) {
+                                //sorcerer tower
+                                else if (3*SPRITE_SIZE/2 +50 <= event.button.x && event.button.x <= 4*SPRITE_SIZE/2+50 && 0 <= event.button.y && event.button.y <= SPRITE_SIZE/2) {
                                     if (buyTower(&tower_list, enemy_list, SORCERER_TOWER, selected_tile_pos[0], selected_tile_pos[1], &funds)) menu_hidden = true;
                                 }
                             }
@@ -2151,6 +2154,7 @@ int main(int argc, char* argv[]) {
         CAM_POS_X += BASE_CAM_SPEED * cam_x_speed * power(CAM_SPEED_MULT, cam_speed_mult) * power(1.4142/2, cam_x_speed && cam_y_speed) / CAM_SCALE;
         CAM_POS_Y += BASE_CAM_SPEED * cam_y_speed * power(CAM_SPEED_MULT, cam_speed_mult) * power(1.4142/2, cam_x_speed && cam_y_speed) / CAM_SCALE;
         /* Draw elements */
+        drawImgStatic(rend,background,0,0,WINDOW_WIDTH,WINDOW_HEIGHT,NULL); 
         for (int y = 0; y < NB_ROWS; y++) for (int x = 0; x < NB_COLLUMNS; x++) {
                 drawImgDynamic(rend, grass_tiles[x%2 + (y%2) * 2], TILE_WIDTH * x, TILE_HEIGHT * y, SPRITE_SIZE, SPRITE_SIZE, NULL);
         }
