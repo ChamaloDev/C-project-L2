@@ -119,18 +119,18 @@
 #define char_plus '+'
 #define char_minus '-'
 #define char_percent '%'
-#define char_dot = '.'
-#define char_comma = ','
-#define char_colon = ':'
-#define char_semicolon = ';'
-#define char_exclamation_mark = '!'
-#define char_question_mark = '?'
+#define char_dot '.'
+#define char_comma ','
+#define char_colon ':'
+#define char_semicolon ';'
+#define char_exclamation_mark '!'
+#define char_question_mark '?'
 #define char_dollar '$'
-#define char_underscore = '_'
-#define char_slash = '/'
-#define char_antislash = '\\'
-#define char_left_bracket = '('
-#define char_right_bracket = ')'
+#define char_underscore '_'
+#define char_slash '/'
+#define char_antislash '\\'
+#define char_left_bracket '('
+#define char_right_bracket ')'
 
 
 
@@ -222,13 +222,12 @@ double min(double x, double y);
 double max(double x, double y);
 double power(double x, int n);
 char *concatString(const char *a, const char *b);
-int stringCount(const char *str, char c);
 int stringToInt(const char *str);
 int positive_div(int i, int n);
 int positive_mod(int i, int n);
 double periodicFunctionSub(double x);
 double periodicFunction(Uint64 x);
-SDL_Surface *textSurface(const char *text, int r1, int g1, int b1, int r2, int g2, int b2);
+SDL_Surface *textSurface(char *text);
 Animation *newAnim();
 void destroyAnim(Animation *anim);
 void setAnim(Animation *anim, char type, Uint64 length, int *data);
@@ -327,13 +326,6 @@ char *concatString(const char *a, const char *b) {
     return c;
 }
 
-/* Count number of occurences of c in str */
-int stringCount(const char *str, char c) {
-    int i = 0;
-    for (char *s = str; s[i]; (s[i] == c) ? i++ : s++);
-    return i;
-}
-
 /* Convert a string to an int */
 int stringToInt(const char *str) {
     int n;
@@ -365,20 +357,14 @@ double periodicFunction(Uint64 x) {
 
 
 
-/* Create a new text surface of with color1 been the main color and color2 been the outline color */
-// [WIP]
-SDL_Surface *textSurface(const char *text, int r1, int g1, int b1, int r2, int g2, int b2) {
-    /* Colors */
-    SDL_Color color1old = {0, 0, 0, 255};
-    SDL_Color color2old = {255, 255, 255, 255};
-    SDL_Color color1new = {r1, g1, b1, 255};
-    SDL_Color color2new = {r2, g2, b2, 255};
+/* Create a new text surface */
+SDL_Surface *textSurface(char *text) {
     /* Getting number of lines and the maximum line size in order to create a surface of appropriate size */
     int nb_lines = 1, max_line_length = 0, current_line_length = 0;
     char *c = text;
-    while (c) {
+    while (*c) {
         /* Line break */
-        if (c == '\n') {
+        if (*c == '\n') {
             max_line_length = max(max_line_length, current_line_length);
             current_line_length = 0;
             nb_lines++;
@@ -389,15 +375,17 @@ SDL_Surface *textSurface(const char *text, int r1, int g1, int b1, int r2, int g
         }
         c++;
     }
+    max_line_length = max(max_line_length, current_line_length);
+    printf(">>> %d %d\n", max_line_length, nb_lines);
     /* Creating text zone surface */
-    SDL_Surface *text_zone = SDL_CreateRGBSurface(0, max_line_length*FONT_WIDTH, nb_lines*FONT_HEIGHT, 32, 0, 0, 0, 0);
+    SDL_Surface *text_zone = SDL_CreateRGBSurface(0, max_line_length*FONT_WIDTH, nb_lines*FONT_HEIGHT, 32, 0x000000FF, 0x0000FF00, 0x00FF0000, 0xFF000000);
     /* Putting text in the text zone surface */
     SDL_Surface *character; SDL_Rect dest; SDL_Rect char_rect = {0, 0, FONT_WIDTH, FONT_HEIGHT};
     int x = 0, y = 0;
     c = text;
-    while (c) {
+    while (*c) {
         /* Line break */
-        if (c == '\n') {
+        if (*c == '\n') {
             y++;
             x = 0;
         }
@@ -2196,7 +2184,6 @@ int main(int argc, char* argv[]) {
             }
             drawImgDynamic(rend, highlighted_tile, (selected_tile_pos[0]-1)*TILE_WIDTH, (selected_tile_pos[1]-1)*TILE_HEIGHT, SPRITE_SIZE, SPRITE_SIZE, NULL);
         }
-
         /* Draw to window and loop */
         SDL_RenderPresent(rend);
         SDL_Delay(max(1000/FPS - (SDL_GetTicks64()-CURRENT_TICK), 0));

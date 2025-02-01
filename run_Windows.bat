@@ -13,11 +13,11 @@ rem Create bin directory if it doesn't exist
 if not exist bin mkdir bin
 
 rem Compile source files into object files
-%CC% -std=c17 -Wall -Wextra %CFLAGS% -c %SRC% -o %OBJ%
+%CC% -std=c17 -Wall -Wextra %CFLAGS% -c %SRC% -o bin\%OBJ%
 rem Link object files into the executable
-%CC% -o bin\%EXEC% %OBJ% %LDFLAGS%
+%CC% -o bin\%EXEC% bin\%OBJ% %LDFLAGS%
 rem Remove the object file
-del %OBJ%
+del bin\%OBJ%
 
 rem Change to the bin directory
 cd bin
