@@ -376,7 +376,6 @@ SDL_Surface *textSurface(char *text) {
         c++;
     }
     max_line_length = max(max_line_length, current_line_length);
-    printf(">>> %d %d\n", max_line_length, nb_lines);
     /* Creating text zone surface */
     SDL_Surface *text_zone = SDL_CreateRGBSurface(0, max_line_length*FONT_WIDTH, nb_lines*FONT_HEIGHT, 32, 0x000000FF, 0x0000FF00, 0x00FF0000, 0xFF000000);
     /* Putting text in the text zone surface */
