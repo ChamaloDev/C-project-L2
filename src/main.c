@@ -227,7 +227,7 @@ int positive_div(int i, int n);
 int positive_mod(int i, int n);
 double periodicFunctionSub(double x);
 double periodicFunction(Uint64 x);
-SDL_Surface *textSurface(char *text);
+SDL_Surface *textSurface(char *text, SDL_Color main_color, SDL_Color outline_color);
 Animation *newAnim();
 void destroyAnim(Animation *anim);
 void setAnim(Animation *anim, char type, Uint64 length, int *data);
@@ -358,7 +358,7 @@ double periodicFunction(Uint64 x) {
 
 
 /* Create a new text surface */
-SDL_Surface *textSurface(char *text) {
+SDL_Surface *textSurface(char *text, SDL_Color main_color, SDL_Color outline_color) {
     /* Getting number of lines and the maximum line size in order to create a surface of appropriate size */
     int nb_lines = 1, max_line_length = 0, current_line_length = 0;
     char *c = text;
@@ -635,10 +635,22 @@ SDL_Surface *textSurface(char *text) {
                 printf("[ERROR]    No font availible for character '%c'\n", *c);
                 character = loadImg("font/char_question_mark");
             }
+            /* Color the character */
+            Uint32 *pixels = character->pixels;
+            for (int i = 0; i < character->w * character->h; i++) {
+                /* Main color (by default #000000 black) */
+                if (pixels[i] == SDL_MapRGB(character->format, 0x00, 0x00, 0x00))
+                    pixels[i] = SDL_MapRGB(character->format, main_color.r, main_color.g, main_color.b);
+                /* Outline color (by default #FFFFFF white) */
+                else if (pixels[i] == SDL_MapRGB(character->format, 0xFF, 0xFF, 0xFF))
+                    pixels[i] = SDL_MapRGB(character->format, outline_color.r, outline_color.g, outline_color.b);
+            }
             /* Draw the character */
             dest.x = x*FONT_WIDTH; dest.y = y*FONT_HEIGHT; dest.w = FONT_WIDTH; dest.h = FONT_HEIGHT;
             SDL_BlitSurface(character, &char_rect, text_zone, &dest);
             x++;
+            /* Free the allocated memory */
+            SDL_FreeSurface(character);
         }
         c++;
     }
@@ -1900,6 +1912,8 @@ int main(int argc, char* argv[]) {
     SDL_Surface *highlighted_tile = loadImg("others/tile_choosed");
     SDL_Surface *delete_tower = loadImg("others/delete");
     char TowersNames[4][MAX_LENGTH_TOWER_NAME]={"Archer Tower 50G","Wall 25G","Canon 100G","Sorcerer tower 75G"};
+    SDL_Color color1 = {255, 0, 0, 255}, color2 = {127, 0, 0, 255};
+    SDL_Surface *text = textSurface("azertyuiopqsdfghjklmwxcvbn\nAZERTYUIOPQSDFGHJKLMWXCVBN?", color1, color2);
 
     /* Main loop */
     Tower *towerOnTile;
@@ -2154,7 +2168,7 @@ int main(int argc, char* argv[]) {
         CAM_POS_X += BASE_CAM_SPEED * cam_x_speed * power(CAM_SPEED_MULT, cam_speed_mult) * power(1.4142/2, cam_x_speed && cam_y_speed) / CAM_SCALE;
         CAM_POS_Y += BASE_CAM_SPEED * cam_y_speed * power(CAM_SPEED_MULT, cam_speed_mult) * power(1.4142/2, cam_x_speed && cam_y_speed) / CAM_SCALE;
         /* Draw elements */
-        drawImgStatic(rend,background,0,0,WINDOW_WIDTH,WINDOW_HEIGHT,NULL); 
+        // drawImgStatic(rend,background,0,0,WINDOW_WIDTH,WINDOW_HEIGHT,NULL);
         for (int y = 0; y < NB_ROWS; y++) for (int x = 0; x < NB_COLLUMNS; x++) {
                 drawImgDynamic(rend, grass_tiles[x%2 + (y%2) * 2], TILE_WIDTH * x, TILE_HEIGHT * y, SPRITE_SIZE, SPRITE_SIZE, NULL);
         }
@@ -2187,6 +2201,9 @@ int main(int argc, char* argv[]) {
             }
             drawImgDynamic(rend, highlighted_tile, (selected_tile_pos[0]-1)*TILE_WIDTH, (selected_tile_pos[1]-1)*TILE_HEIGHT, SPRITE_SIZE, SPRITE_SIZE, NULL);
         }
+
+        drawImgStatic(rend, text, 0, 0, text->w*2, text->h*2, NULL);
+
         /* Draw to window and loop */
         SDL_RenderPresent(rend);
         SDL_Delay(max(1000/FPS - (SDL_GetTicks64()-CURRENT_TICK), 0));
