@@ -15,6 +15,8 @@
 #define SPRITE_SIZE 320    // Height and width of all sprites in px
 #define BASE_CAM_SPEED 10  // Default camera speed when moving using WASD
 #define CAM_SPEED_MULT 3   // Camera speed multiplier when using lShift or lCtrl
+#define FONT_WIDTH 32      // Width of the custom font in px
+#define FONT_HEIGHT 48     // Height of the custom font in px
 
 #define MAX_LENGTH_TOWER_NAME 20
 
@@ -46,6 +48,89 @@
 #define ENEMIES_ATTACKING_PHASE 3
 #define WAVE_DEAFEATED_PHASE 4
 #define GAME_OVER_PHASE 5
+
+
+
+
+/* Character name */
+#define char_0 '0'
+#define char_1 '1'
+#define char_2 '2'
+#define char_3 '3'
+#define char_4 '4'
+#define char_5 '5'
+#define char_6 '6'
+#define char_7 '7'
+#define char_8 '8'
+#define char_9 '9'
+#define char_A_upper 'A'
+#define char_B_upper 'B'
+#define char_C_upper 'C'
+#define char_D_upper 'D'
+#define char_E_upper 'E'
+#define char_F_upper 'F'
+#define char_G_upper 'G'
+#define char_H_upper 'H'
+#define char_I_upper 'I'
+#define char_J_upper 'J'
+#define char_K_upper 'K'
+#define char_L_upper 'L'
+#define char_M_upper 'M'
+#define char_N_upper 'N'
+#define char_O_upper 'O'
+#define char_P_upper 'P'
+#define char_Q_upper 'Q'
+#define char_R_upper 'R'
+#define char_S_upper 'S'
+#define char_T_upper 'T'
+#define char_U_upper 'U'
+#define char_V_upper 'V'
+#define char_W_upper 'W'
+#define char_X_upper 'X'
+#define char_Y_upper 'Y'
+#define char_Z_upper 'Z'
+#define char_A_lower 'a'
+#define char_B_lower 'b'
+#define char_C_lower 'c'
+#define char_D_lower 'd'
+#define char_E_lower 'e'
+#define char_F_lower 'f'
+#define char_G_lower 'g'
+#define char_H_lower 'h'
+#define char_I_lower 'i'
+#define char_J_lower 'j'
+#define char_K_lower 'k'
+#define char_L_lower 'l'
+#define char_M_lower 'm'
+#define char_N_lower 'n'
+#define char_O_lower 'o'
+#define char_P_lower 'p'
+#define char_Q_lower 'q'
+#define char_R_lower 'r'
+#define char_S_lower 's'
+#define char_T_lower 't'
+#define char_U_lower 'u'
+#define char_V_lower 'v'
+#define char_W_lower 'w'
+#define char_X_lower 'x'
+#define char_Y_lower 'y'
+#define char_Z_lower 'z'
+#define char_whitespace ' '
+#define char_plus '+'
+#define char_minus '-'
+#define char_percent '%'
+#define char_dot = '.'
+#define char_comma = ','
+#define char_colon = ':'
+#define char_semicolon = ';'
+#define char_exclamation_mark = '!'
+#define char_question_mark = '?'
+#define char_dollar '$'
+#define char_underscore = '_'
+#define char_slash = '/'
+#define char_antislash = '\\'
+#define char_left_bracket = '('
+#define char_right_bracket = ')'
 
 
 
@@ -137,11 +222,13 @@ double min(double x, double y);
 double max(double x, double y);
 double power(double x, int n);
 char *concatString(const char *a, const char *b);
+int stringCount(const char *str, char c);
 int stringToInt(const char *str);
 int positive_div(int i, int n);
 int positive_mod(int i, int n);
 double periodicFunctionSub(double x);
 double periodicFunction(Uint64 x);
+SDL_Surface *textSurface(const char *text, int r1, int g1, int b1, int r2, int g2, int b2);
 Animation *newAnim();
 void destroyAnim(Animation *anim);
 void setAnim(Animation *anim, char type, Uint64 length, int *data);
@@ -196,6 +283,9 @@ void freeEverything(Enemy **enemy_list,Tower **tower_list);
 void write(SDL_Renderer *rend,TTF_Font *font,const char *text,int pos_x,int pos_y, int width,int height,int red,int green,int blue,int alpha);
 Tower *upgradeTower(Tower **tower_list, Enemy *enemy_list, char tower_type, int placement_collumn, int placement_row, int *funds);
 
+
+
+
 /* Return an integer between a and b (included) */
 int randrange(int a, int b) {
     return positive_mod(rand(), abs(b-a)+1) + min(a, b);
@@ -237,6 +327,13 @@ char *concatString(const char *a, const char *b) {
     return c;
 }
 
+/* Count number of occurences of c in str */
+int stringCount(const char *str, char c) {
+    int i = 0;
+    for (char *s = str; s[i]; (s[i] == c) ? i++ : s++);
+    return i;
+}
+
 /* Convert a string to an int */
 int stringToInt(const char *str) {
     int n;
@@ -265,6 +362,302 @@ double periodicFunction(Uint64 x) {
     if (x >= 250) return 1.0 - periodicFunctionSub(positive_mod(x, 250) / 1000.0);
     return periodicFunctionSub(0.25 - positive_mod(x, 250) / 1000.0);
 }
+
+
+
+/* Create a new text surface of with color1 been the main color and color2 been the outline color */
+// [WIP]
+SDL_Surface *textSurface(const char *text, int r1, int g1, int b1, int r2, int g2, int b2) {
+    /* Colors */
+    SDL_Color color1old = {0, 0, 0, 255};
+    SDL_Color color2old = {255, 255, 255, 255};
+    SDL_Color color1new = {r1, g1, b1, 255};
+    SDL_Color color2new = {r2, g2, b2, 255};
+    /* Getting number of lines and the maximum line size in order to create a surface of appropriate size */
+    int nb_lines = 1, max_line_length = 0, current_line_length = 0;
+    char *c = text;
+    while (c) {
+        /* Line break */
+        if (c == '\n') {
+            max_line_length = max(max_line_length, current_line_length);
+            current_line_length = 0;
+            nb_lines++;
+        }
+        /* Any other character */
+        else {
+            current_line_length++;
+        }
+        c++;
+    }
+    /* Creating text zone surface */
+    SDL_Surface *text_zone = SDL_CreateRGBSurface(0, max_line_length*FONT_WIDTH, nb_lines*FONT_HEIGHT, 32, 0, 0, 0, 0);
+    /* Putting text in the text zone surface */
+    SDL_Surface *character; SDL_Rect dest; SDL_Rect char_rect = {0, 0, FONT_WIDTH, FONT_HEIGHT};
+    int x = 0, y = 0;
+    c = text;
+    while (c) {
+        /* Line break */
+        if (c == '\n') {
+            y++;
+            x = 0;
+        }
+        /* Any other character */
+        else {
+            /* Load the character */
+            character = NULL;
+            switch (*c) {
+                case char_0:
+                    character = loadImg("font/char_0");
+                    break;
+                case char_1:
+                    character = loadImg("font/char_1");
+                    break;
+                case char_2:
+                    character = loadImg("font/char_2");
+                    break;
+                case char_3:
+                    character = loadImg("font/char_3");
+                    break;
+                case char_4:
+                    character = loadImg("font/char_4");
+                    break;
+                case char_5:
+                    character = loadImg("font/char_5");
+                    break;
+                case char_6:
+                    character = loadImg("font/char_6");
+                    break;
+                case char_7:
+                    character = loadImg("font/char_7");
+                    break;
+                case char_8:
+                    character = loadImg("font/char_8");
+                    break;
+                case char_9:
+                    character = loadImg("font/char_9");
+                    break;
+                case char_A_upper:
+                    character = loadImg("font/char_A_upper");
+                    break;
+                case char_B_upper:
+                    character = loadImg("font/char_B_upper");
+                    break;
+                case char_C_upper:
+                    character = loadImg("font/char_C_upper");
+                    break;
+                case char_D_upper:
+                    character = loadImg("font/char_D_upper");
+                    break;
+                case char_E_upper:
+                    character = loadImg("font/char_E_upper");
+                    break;
+                case char_F_upper:
+                    character = loadImg("font/char_F_upper");
+                    break;
+                case char_G_upper:
+                    character = loadImg("font/char_G_upper");
+                    break;
+                case char_H_upper:
+                    character = loadImg("font/char_H_upper");
+                    break;
+                case char_I_upper:
+                    character = loadImg("font/char_I_upper");
+                    break;
+                case char_J_upper:
+                    character = loadImg("font/char_J_upper");
+                    break;
+                case char_K_upper:
+                    character = loadImg("font/char_K_upper");
+                    break;
+                case char_L_upper:
+                    character = loadImg("font/char_L_upper");
+                    break;
+                case char_M_upper:
+                    character = loadImg("font/char_M_upper");
+                    break;
+                case char_N_upper:
+                    character = loadImg("font/char_N_upper");
+                    break;
+                case char_O_upper:
+                    character = loadImg("font/char_O_upper");
+                    break;
+                case char_P_upper:
+                    character = loadImg("font/char_P_upper");
+                    break;
+                case char_Q_upper:
+                    character = loadImg("font/char_Q_upper");
+                    break;
+                case char_R_upper:
+                    character = loadImg("font/char_R_upper");
+                    break;
+                case char_S_upper:
+                    character = loadImg("font/char_S_upper");
+                    break;
+                case char_T_upper:
+                    character = loadImg("font/char_T_upper");
+                    break;
+                case char_U_upper:
+                    character = loadImg("font/char_U_upper");
+                    break;
+                case char_V_upper:
+                    character = loadImg("font/char_V_upper");
+                    break;
+                case char_W_upper:
+                    character = loadImg("font/char_W_upper");
+                    break;
+                case char_X_upper:
+                    character = loadImg("font/char_X_upper");
+                    break;
+                case char_Y_upper:
+                    character = loadImg("font/char_Y_upper");
+                    break;
+                case char_Z_upper:
+                    character = loadImg("font/char_Z_upper");
+                    break;
+                case char_A_lower:
+                    character = loadImg("font/char_A_lower");
+                    break;
+                case char_B_lower:
+                    character = loadImg("font/char_B_lower");
+                    break;
+                case char_C_lower:
+                    character = loadImg("font/char_C_lower");
+                    break;
+                case char_D_lower:
+                    character = loadImg("font/char_D_lower");
+                    break;
+                case char_E_lower:
+                    character = loadImg("font/char_E_lower");
+                    break;
+                case char_F_lower:
+                    character = loadImg("font/char_F_lower");
+                    break;
+                case char_G_lower:
+                    character = loadImg("font/char_G_lower");
+                    break;
+                case char_H_lower:
+                    character = loadImg("font/char_H_lower");
+                    break;
+                case char_I_lower:
+                    character = loadImg("font/char_I_lower");
+                    break;
+                case char_J_lower:
+                    character = loadImg("font/char_J_lower");
+                    break;
+                case char_K_lower:
+                    character = loadImg("font/char_K_lower");
+                    break;
+                case char_L_lower:
+                    character = loadImg("font/char_L_lower");
+                    break;
+                case char_M_lower:
+                    character = loadImg("font/char_M_lower");
+                    break;
+                case char_N_lower:
+                    character = loadImg("font/char_N_lower");
+                    break;
+                case char_O_lower:
+                    character = loadImg("font/char_O_lower");
+                    break;
+                case char_P_lower:
+                    character = loadImg("font/char_P_lower");
+                    break;
+                case char_Q_lower:
+                    character = loadImg("font/char_Q_lower");
+                    break;
+                case char_R_lower:
+                    character = loadImg("font/char_R_lower");
+                    break;
+                case char_S_lower:
+                    character = loadImg("font/char_S_lower");
+                    break;
+                case char_T_lower:
+                    character = loadImg("font/char_T_lower");
+                    break;
+                case char_U_lower:
+                    character = loadImg("font/char_U_lower");
+                    break;
+                case char_V_lower:
+                    character = loadImg("font/char_V_lower");
+                    break;
+                case char_W_lower:
+                    character = loadImg("font/char_W_lower");
+                    break;
+                case char_X_lower:
+                    character = loadImg("font/char_X_lower");
+                    break;
+                case char_Y_lower:
+                    character = loadImg("font/char_Y_lower");
+                    break;
+                case char_Z_lower:
+                    character = loadImg("font/char_Z_lower");
+                    break;
+                case char_whitespace:
+                    character = loadImg("font/char_whitespace");
+                    break;
+                case char_plus:
+                    character = loadImg("font/char_plus");
+                    break;
+                case char_minus:
+                    character = loadImg("font/char_minus");
+                    break;
+                case char_percent:
+                    character = loadImg("font/char_percent");
+                    break;
+                case char_dot:
+                    character = loadImg("font/char_dot");
+                    break;
+                case char_comma:
+                    character = loadImg("font/char_comma");
+                    break;
+                case char_colon:
+                    character = loadImg("font/char_colon");
+                    break;
+                case char_semicolon:
+                    character = loadImg("font/char_semicolon");
+                    break;
+                case char_exclamation_mark:
+                    character = loadImg("font/char_exclamation_mark");
+                    break;
+                case char_question_mark:
+                    character = loadImg("font/char_question_mark");
+                    break;
+                case char_dollar:
+                    character = loadImg("font/char_dollar");
+                    break;
+                case char_underscore:
+                    character = loadImg("font/char_underscore");
+                    break;
+                case char_slash:
+                    character = loadImg("font/char_slash");
+                    break;
+                case char_antislash:
+                    character = loadImg("font/char_antislash");
+                    break;
+                case char_left_bracket:
+                    character = loadImg("font/char_left_bracket");
+                    break;
+                case char_right_bracket:
+                    character = loadImg("font/char_right_bracket");
+                    break;
+                default:
+                    character = NULL;
+                    break;
+            }
+            if (!character) {
+                printf("[ERROR]    No font availible for character '%c'\n", *c);
+                character = loadImg("font/char_question_mark");
+            }
+            /* Draw the character */
+            dest.x = x*FONT_WIDTH; dest.y = y*FONT_HEIGHT; dest.w = FONT_WIDTH; dest.h = FONT_HEIGHT;
+            SDL_BlitSurface(character, &char_rect, text_zone, &dest);
+            x++;
+        }
+        c++;
+    }
+    return text_zone;
+}
+
 
 
 
