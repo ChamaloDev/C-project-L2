@@ -1912,8 +1912,6 @@ int main(int argc, char* argv[]) {
     SDL_Surface *highlighted_tile = loadImg("others/tile_choosed");
     SDL_Surface *delete_tower = loadImg("others/delete");
     char TowersNames[4][MAX_LENGTH_TOWER_NAME]={"Archer Tower 50G","Wall 25G","Canon 100G","Sorcerer tower 75G"};
-    SDL_Color color1 = {255, 0, 0, 255}, color2 = {127, 0, 0, 255};
-    SDL_Surface *text = textSurface("azertyuiopqsdfghjklmwxcvbn\nAZERTYUIOPQSDFGHJKLMWXCVBN?", color1, color2);
 
     /* Main loop */
     Tower *towerOnTile;
@@ -2201,8 +2199,6 @@ int main(int argc, char* argv[]) {
             }
             drawImgDynamic(rend, highlighted_tile, (selected_tile_pos[0]-1)*TILE_WIDTH, (selected_tile_pos[1]-1)*TILE_HEIGHT, SPRITE_SIZE, SPRITE_SIZE, NULL);
         }
-
-        drawImgStatic(rend, text, 0, 0, text->w*2, text->h*2, NULL);
 
         /* Draw to window and loop */
         SDL_RenderPresent(rend);
