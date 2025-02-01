@@ -2147,7 +2147,7 @@ int main(int argc, char* argv[]) {
                 write(rend, font, "YOU WIN", WINDOW_WIDTH/4, WINDOW_HEIGHT/4, WINDOW_WIDTH/2, WINDOW_HEIGHT/2, 0, 0, 0, 255);
                 break;
             case GAME_OVER_PHASE:
-            write(rend, font, "GAME OVER", WINDOW_WIDTH/4, WINDOW_HEIGHT/4, WINDOW_WIDTH/2, WINDOW_HEIGHT/2, 0, 0, 0, 255);
+                write(rend, font, "GAME OVER", WINDOW_WIDTH/4, WINDOW_HEIGHT/4, WINDOW_WIDTH/2, WINDOW_HEIGHT/2, 0, 0, 0, 255);
                 break;
             default:
                 break;
