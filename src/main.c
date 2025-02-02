@@ -41,6 +41,7 @@
 #define ATTACK_ANIMATION 'A'
 #define MOVE_ANIMATION 'M'
 #define PROJECTILE_ANIMATION 'P'
+#define DAMAGE_NUMBER_ANIMATION 'd'
 /* Game phases */
 #define PRE_WAVE_PHASE 0
 #define ENEMIES_MOVING_PHASE 1
@@ -160,7 +161,8 @@ typedef struct {
 
 /* Towers */
 typedef struct tower {
-    int type;                  // tower type, determine it's abilities, look and upgrades
+    int type;                  // Tower type, determine it's abilities, look and upgrades
+    int max_live_points;       // Maximum live points of the tower
     int live_points;           // Live points of the tower, when it reaches 0 or bellow the tower is destroyed
     int row;                   // Row number of the tower, 0 being the topmost row
     int collumn;               // Collumn number of the tower, 0 being the leftmost collumn
@@ -175,6 +177,7 @@ typedef struct tower {
 /* Enemies */
 typedef struct enemy {
     int type;                   // Enemy type, determine it's abilities and look
+    int max_live_points;        // Maximum live points of the enemy
     int live_points;            // Live points of the enemy, when it reaches 0 or bellow the enemy is defeated
     int row;                    // Row number of the enemy, 0 being the topmost row
     int collumn;                // Collumn number of the enemy, 0 being the leftmost collumn
@@ -212,6 +215,18 @@ typedef struct {
     int turn_nb;     // Turn number
 } Game;
 
+/* Text element */
+typedef struct text_element {
+    double scale;         // Text size scaling
+    SDL_Rect rect;        // Rect of the text element
+    bool dynamic_pos;     // Should the position of the text element be static or dynamic
+    bool centered;        // Should the text element be centered or aligned to the left
+    SDL_Surface *sprite;  // Sprite of the text element
+    Animation *anim;      // Animation of the text element
+    struct text_element *next;
+} TextElement;
+
+
 
 
 
@@ -237,7 +252,12 @@ void setAnimDead(Animation *anim);
 void setAnimAttack(Animation *anim, int side);
 void setAnimMove(Animation *anim, int dx, int dy);
 void setAnimProjectile(Animation *anim, int x1, int y1, int x2, int y2, double speed);
+void setAnimDamageNumber(Animation *anim);
 bool applyAnim(Animation *anim, SDL_Rect *rect);
+TextElement *addTextElement(TextElement **text_element_list, char *text, double scale, SDL_Color main_color, SDL_Color outline_color, SDL_Rect rect, bool centered, bool dynamic_pos, Animation *anim);
+void destroyTextElement(TextElement **text_element_list, TextElement *text_element);
+void drawTextElement(SDL_Renderer *rend, TextElement **text_element_list);
+TextElement *addDamageNumber(TextElement **text_element_list, int amount, int collumn, int row);
 bool getEnemyAndTowerAt(Enemy *enemy_list, Tower *tower_list, int collumn, int row, Enemy **enemy, Tower **tower);
 bool isTileEmpty(Enemy *enemy_list, Tower *tower_list, int collumn, int row);
 bool doesTileExist(int collumn, int row);
@@ -245,11 +265,12 @@ Enemy *addEnemy(Enemy **enemy_list, char enemy_type, int spawn_collumn, int spaw
 void destroyEnemy(Enemy *enemy, Enemy **enemy_list);
 Enemy **getFirstEnemyOfAllRows(Enemy *enemy_list);
 Enemy *getFirstEnemyInRow(Enemy *enemy_list, int row);
+void updateEnemies(Enemy **currently_acting_enemy, Enemy **enemy_list, Tower **tower_list, TextElement **text_element_list);
 int moveEnemy(Enemy *enemy, Enemy *enemy_list, Tower *tower_list, int delta, char axis);
 void makeAllEnemiesMove(Enemy *enemy_list, Tower *tower_list);
-void enemyAttack(Enemy *enemy, Tower **tower_list, Enemy **enemy_list);
+void enemyAttack(Enemy *enemy, Tower **tower_list, Enemy **enemy_list, TextElement **text_element_list);
 void makeAllEnemiesAct(Enemy *enemy_list, Enemy **currently_acting_enemy);
-bool damageEnemy(Enemy *enemy, int amount, Enemy **enemy_list, Tower *tower_list);
+bool damageEnemy(Enemy *enemy, int amount, Enemy **enemy_list, Tower *tower_list, TextElement **text_element_list);
 Tower *addTower(Tower **tower_list, Enemy *enemy_list, char tower_type, int placement_row, int placement_collumn);
 Tower *buyTower(Tower **tower_list, Enemy *enemy_list, char tower_type, int placement_row, int placement_collumn, int *funds);
 void destroyTower(Tower *tower, Tower **tower_list);
@@ -257,11 +278,11 @@ void sellTower(Tower *tower, Tower **tower_list, int *funds);
 void towerAct(Tower *tower, Tower **tower_list, Enemy *enemy_list, Projectile **projectile_list);
 void updateTowers(Tower **currently_acting_tower, Tower **tower_list, Enemy *enemy_list, Projectile **projectile_list);
 void makeAllTowersAct(Tower *tower_list, Tower **currently_acting_tower);
-bool damageTower(Tower *tower, int amount, Tower **tower_list);
+bool damageTower(Tower *tower, int amount, Tower **tower_list, TextElement **text_element_list);
 Projectile *addProjectile(Projectile **projectile_list, Tower *origin, Enemy *target);
 void destroyProjectile(Projectile *projectile, Projectile **projectile_list);
 bool hasProjectileReachedTarget(Projectile *projectile);
-void updateProjectiles(Projectile **projectile_list, Enemy **enemy_list, Tower *tower_list);
+void updateProjectiles(Projectile **projectile_list, Enemy **enemy_list, Tower *tower_list, TextElement **text_element_list);
 void drawProjectiles(SDL_Renderer *rend, Projectile *projectile_list);
 bool isWhitespace(char c);
 bool readValue(char **line, char **value);
@@ -715,11 +736,16 @@ void setAnimMove(Animation *anim, int dx, int dy) {
     setAnim(anim, MOVE_ANIMATION, 1500, data);
 }
 
-/* Set animation to projectile, goes from tile (x1 y1) to tile (x2 y2) at speed tile per second */
+/* Set animation to projectile (for projectiles), goes from tile (x1 y1) to tile (x2 y2) at speed tile per second */
 void setAnimProjectile(Animation *anim, int x1, int y1, int x2, int y2, double speed) {
     int *data = malloc(4 * sizeof(int));
     data[0] = x1; data[1] = y1; data[2] = x2; data[3] = y2;
     setAnim(anim, PROJECTILE_ANIMATION, ((abs(x1-x2) + abs(y1-y2))*1000.0 / speed), data);
+}
+
+/* Set animation to damage number (for text elements) */
+void setAnimDamageNumber(Animation *anim) {
+    setAnim(anim, DAMAGE_NUMBER_ANIMATION, 1000, NULL);
 }
 
 /* Apply an animation (affect the destination rect of a texture) */
@@ -762,6 +788,10 @@ bool applyAnim(Animation *anim, SDL_Rect *rect) {
             rect->x = ((anim->data[0]-1) * (1.0-var_a) + (anim->data[2]-1) * var_a) * TILE_WIDTH;
             rect->y = ((anim->data[1]-1) * (1.0-var_a) + (anim->data[3]-1) * var_a) * TILE_HEIGHT;
             break;
+        case DAMAGE_NUMBER_ANIMATION:
+            var_a = (CURRENT_TICK - anim->start_tick) / (double) anim->length;
+            rect->y -= (var_a - 0.5) * TILE_HEIGHT;
+            break;
         /* Unknown animation type */
         default:
             printf("[ERROR]    Undefined animation type '%c'\n", anim->type);
@@ -769,6 +799,94 @@ bool applyAnim(Animation *anim, SDL_Rect *rect) {
             return false;
     }
     return true;
+}
+
+
+
+
+/* Add a text element */
+TextElement *addTextElement(TextElement **text_element_list, char *text, double scale, SDL_Color main_color, SDL_Color outline_color, SDL_Rect rect, bool centered, bool dynamic_pos, Animation *anim) {
+    /* Initialize a new text element */
+    TextElement *new_text_element = malloc(sizeof(TextElement));
+    new_text_element->scale = scale;
+    new_text_element->rect = rect;
+    new_text_element->centered = centered;
+    new_text_element->dynamic_pos = dynamic_pos;
+    new_text_element->sprite = NULL;
+    new_text_element->anim = anim;
+    new_text_element->next = NULL;
+    /* Load the text sprite */
+    new_text_element->sprite = textSurface(text, main_color, outline_color);
+    /* Add it to the list */
+    if (!(*text_element_list)) {
+        *text_element_list = new_text_element;
+        return new_text_element;
+    }
+    TextElement *current = *text_element_list;
+    while (current && current->next) current = current->next;
+    if (current) current->next = new_text_element;
+    return new_text_element;
+}
+
+/* Destroy a text element */
+void destroyTextElement(TextElement **text_element_list, TextElement *text_element) {
+    if (!text_element || !text_element_list) return;
+    /* Modify pointers */
+    if (*text_element_list == text_element) *text_element_list = text_element->next;
+    else {
+        TextElement *current = *text_element_list;
+        while (current && current->next != text_element) current = current->next;
+        if (current) current->next = text_element->next;
+    }
+    /* Free memory */
+    if (text_element->sprite) SDL_FreeSurface(text_element->sprite);
+    if (text_element->anim) destroyAnim(text_element->anim);
+    free(text_element);
+}
+
+/* Draw all text elements, if a text element animation is set to idle, automaticaly destroy it */
+void drawTextElement(SDL_Renderer *rend, TextElement **text_element_list) {
+    TextElement *current = *text_element_list, *tmp;
+    int x, y, w, h;
+    while (current) {
+        /* Automaticaly destroy text element that are currently in idle animation (or if doesn't have a sprite) */
+        if (!current->sprite || (current->anim && ((current->anim->length != (Uint64) -1 && CURRENT_TICK - current->anim->start_tick >= current->anim->length) || current->anim->type == IDLE_ANIMATION))) {
+            tmp = current->next;
+            destroyTextElement(text_element_list, current);
+            current = tmp;
+            continue;
+        }
+        /* Adjusting draw rect */
+        x = current->rect.x;
+        y = current->rect.y;
+        w = min(current->sprite->w * current->scale, current->rect.w);
+        h = min(current->sprite->h * current->scale, current->rect.h);
+        if (current->centered) {
+            x += (current->rect.w - w)/2;
+            y += (current->rect.h - h)/2;
+        }
+        /* Drawing text element */
+        if (current->dynamic_pos) drawImgDynamic(rend, current->sprite, x, y, w, h, current->anim);
+        else drawImgStatic(rend, current->sprite, x, y, w, h, current->anim);
+        current = current->next;
+    }
+}
+
+/* Add a damage number at the specified position */
+TextElement *addDamageNumber(TextElement **text_element_list, int amount, int collumn, int row) {
+    /* Text value */
+    char text[16];
+    sprintf(text, "-%d", amount);
+    /* Colors */
+    SDL_Color main_color = {127, 0, 0, 255};
+    SDL_Color outline_color = {0, 0, 0, 255};
+    /* Destination rect */
+    SDL_Rect rect = {(collumn-1)*TILE_WIDTH, (row-1)*TILE_HEIGHT, TILE_WIDTH, TILE_HEIGHT};
+    /* Damage number animation */
+    Animation *anim = newAnim();
+    setAnimDamageNumber(anim);
+    /* Ceating the new text element */
+    return addTextElement(text_element_list, text, 2.0, main_color, outline_color, rect, true, true, anim);
 }
 
 
@@ -825,23 +943,23 @@ Enemy *addEnemy(Enemy **enemy_list, char enemy_type, int spawn_collumn, int spaw
     /* Match the enemy type to its stats */
     switch (enemy_type) {
         case SLIME_ENEMY:
-            new_enemy->live_points = 5;
-            new_enemy->base_speed = 2;
+            new_enemy->max_live_points = new_enemy->live_points = 5;
+            new_enemy->base_speed = new_enemy->speed = 2;
             new_enemy->sprite = loadImg("enemies/Slime");
             break;
         case GELLY_ENEMY:
-            new_enemy->live_points = 6;
-            new_enemy->base_speed = 2;
+            new_enemy->max_live_points = new_enemy->live_points = 6;
+            new_enemy->base_speed = new_enemy->speed = 2;
             new_enemy->sprite = loadImg("enemies/Gelly");
             break;
         case GOBLIN_ENEMY:
-            new_enemy->live_points = 10;
-            new_enemy->base_speed = 3;
+            new_enemy->max_live_points = new_enemy->live_points = 10;
+            new_enemy->base_speed = new_enemy->speed = 3;
             new_enemy->sprite = loadImg("enemies/Goblin");
             break;
         case ORC_ENEMY:
-            new_enemy->live_points = 20;
-            new_enemy->base_speed = 1;
+            new_enemy->max_live_points = new_enemy->live_points = 20;
+            new_enemy->base_speed = new_enemy->speed = 1;
             new_enemy->sprite = loadImg("enemies/Orc");
             break;
         default:  /* Unknown enemy type */
@@ -983,7 +1101,7 @@ int moveEnemy(Enemy *enemy, Enemy *enemy_list, Tower *tower_list, int delta, cha
 }
 
 /* Update all enemies */
-void updateEnemies(Enemy **currently_acting_enemy, Enemy **enemy_list, Tower **tower_list) {
+void updateEnemies(Enemy **currently_acting_enemy, Enemy **enemy_list, Tower **tower_list, TextElement **text_element_list) {
     Enemy *enemy;// = *enemy_list; Enemy *tmp;
     // while (enemy) {
     //     /* Destroy enemy when live points are bellow 0 */
@@ -1000,7 +1118,7 @@ void updateEnemies(Enemy **currently_acting_enemy, Enemy **enemy_list, Tower **t
         enemy = *enemy_list;
         while (enemy && enemy->next != *currently_acting_enemy) enemy = enemy->next;
         if (enemy && enemy->anim && enemy->anim->type == ATTACK_ANIMATION) return;
-        enemyAttack(*currently_acting_enemy, tower_list, enemy_list);
+        enemyAttack(*currently_acting_enemy, tower_list, enemy_list, text_element_list);
         *currently_acting_enemy = (*currently_acting_enemy)->next;
     }
 }
@@ -1028,53 +1146,34 @@ void makeAllEnemiesMove(Enemy *enemy_list, Tower *tower_list) {
 }
 
 /* Make a singular enemy attack */
-void enemyAttack(Enemy *enemy, Tower **tower_list, Enemy **enemy_list) {
+void enemyAttack(Enemy *enemy, Tower **tower_list, Enemy **enemy_list, TextElement **text_element_list) {
     if (!enemy) return;
     /* Getting tower in front of the enemy (if there is one) */
     Enemy *e; Tower *tower; bool result;
     getEnemyAndTowerAt(*enemy_list, *tower_list, enemy->collumn-1, enemy->row, &e, &tower);
     /* Making enemy act accordingly to its type */
+    result = 0;
     switch (enemy->type) {
         case SLIME_ENEMY:
-            if (tower) {
-                result = damageTower(tower, 2, tower_list);
-                if (result) {
-                    setAnimAttack(enemy->anim, -1);
-                    enemy->speed = 0;
-                }
-            }
+            if (tower) result = damageTower(tower, 2, tower_list, text_element_list);
             break;
         case GELLY_ENEMY:
-            if (tower) {
-                result = damageTower(tower, 2, tower_list);
-                if (result) {
-                    setAnimAttack(enemy->anim, -1);
-                    enemy->speed = 0;
-                }
-            }
+            if (tower) result = damageTower(tower, 2, tower_list, text_element_list);
             break;
         case GOBLIN_ENEMY:
-            if (tower) {
-                result = damageTower(tower, 3, tower_list);
-                if (result) {
-                    setAnimAttack(enemy->anim, -1);
-                    enemy->speed = 0;
-                }
-            }
+            if (tower) result = damageTower(tower, 3, tower_list, text_element_list);
             break;
         case ORC_ENEMY:
-            if (tower) {
-                result = damageTower(tower, 5, tower_list);
-                if (result) {
-                    setAnimAttack(enemy->anim, -1);
-                    enemy->speed = 0;
-                }
-            }
+            if (tower) result = damageTower(tower, 5, tower_list, text_element_list);
             break;
         default:  /* Unknown enemy type */
             printf("[ERROR]    Unknown enemy type '%c'\n", enemy->type);
             destroyEnemy(enemy, enemy_list);
             break;
+    }
+    if (result) {
+        setAnimAttack(enemy->anim, -1);
+        enemy->speed = 0;
     }
 }
 
@@ -1088,7 +1187,7 @@ void makeAllEnemiesAct(Enemy *enemy_list, Enemy **currently_acting_enemy) {
 }
 
 /* Damage an enemy */
-bool damageEnemy(Enemy *enemy, int amount, Enemy **enemy_list, Tower *tower_list) {
+bool damageEnemy(Enemy *enemy, int amount, Enemy **enemy_list, Tower *tower_list, TextElement **text_element_list) {
     if (!enemy || !amount || !enemy_list) return false;
     int n, x, y;
 
@@ -1096,6 +1195,8 @@ bool damageEnemy(Enemy *enemy, int amount, Enemy **enemy_list, Tower *tower_list
     Enemy *e = *enemy_list;
     while (e && e != enemy) e = e->next;
     if (!e) return false;
+    /* Show damage number */
+    if (text_element_list) addDamageNumber(text_element_list, amount, enemy->collumn, enemy->row);
     /* Damage enemy */
     enemy->live_points -= amount;
     setAnimHurt(enemy->anim);
@@ -1155,49 +1256,49 @@ Tower *addTower(Tower **tower_list, Enemy *enemy_list, char tower_type, int plac
     new_tower->anim = newAnim();
     switch (tower_type){
         case ARCHER_TOWER:
-            new_tower->live_points = 6;
+            new_tower->max_live_points = new_tower->live_points = 6;
             new_tower->cost = 50;
             new_tower->base_attack_cooldown = 1;
             new_tower->sprite = loadImg("towers/Archer_tower");
             break;
         case WALL_TOWER:
-            new_tower->live_points = 10;
+            new_tower->max_live_points = new_tower->live_points = 10;
             new_tower->cost = 30;
             new_tower->base_attack_cooldown = 1;
             new_tower->sprite = loadImg("towers/Empty_tower");
             break;
         case BARRACK_TOWER:
-            new_tower->live_points = 15;
+            new_tower->max_live_points = new_tower->live_points = 15;
             new_tower->cost = 70;
             new_tower->base_attack_cooldown = 5;
             new_tower->sprite = loadImg("towers/barracks");
             break;
         case SOLIDER_TOWER:
-            new_tower->live_points = 3;
+            new_tower->max_live_points = new_tower->live_points = 3;
             new_tower->cost = 0;
             new_tower->base_attack_cooldown = 1;
             new_tower->sprite = loadImg("towers/Spearman");
             break;
         case CANON_TOWER:
-            new_tower->live_points = 4;
+            new_tower->max_live_points = new_tower->live_points = 4;
             new_tower->cost = 100;
             new_tower->base_attack_cooldown = 3;
             new_tower->sprite = loadImg("towers/canon");
             break;
         case DESTROYER_TOWER:
-            new_tower->live_points = 8;
+            new_tower->max_live_points = new_tower->live_points = 8;
             new_tower->cost = 120;
             new_tower->base_attack_cooldown = 3;
             new_tower->sprite = loadImg("towers/canon_evolved");
             break;
         case SORCERER_TOWER:
-            new_tower->live_points = 5;
+            new_tower->max_live_points = new_tower->live_points = 5;
             new_tower->cost = 70;
             new_tower->base_attack_cooldown = 2;
             new_tower->sprite = loadImg("towers/sorcerer");
             break;
         case MAGE_TOWER:
-            new_tower->live_points = 7;
+            new_tower->max_live_points = new_tower->live_points = 7;
             new_tower->cost = 100;
             new_tower->base_attack_cooldown = 2;
             new_tower->sprite = loadImg("towers/sorcerer_evolved");
@@ -1441,12 +1542,14 @@ void makeAllTowersAct(Tower *tower_list, Tower **currently_acting_tower) {
 }
 
 /* Damage a tower */
-bool damageTower(Tower *tower, int amount, Tower **tower_list) {
+bool damageTower(Tower *tower, int amount, Tower **tower_list, TextElement **text_element_list) {
     if (!tower || !amount || !tower_list) return false;
     /* Check that tower still exist */
     Tower *t = *tower_list;
     while (t && t != tower) t = t->next;
     if (!t) return false;
+    /* Show damage number */
+    if (text_element_list) addDamageNumber(text_element_list, amount, tower->collumn, tower->row);
     /* Damage tower */
     tower->live_points -= amount;
     setAnimHurt(tower->anim);
@@ -1540,7 +1643,7 @@ bool hasProjectileReachedTarget(Projectile *projectile) {
 }
 
 /* Update all projectiles */
-void updateProjectiles(Projectile **projectile_list, Enemy **enemy_list, Tower *tower_list) {
+void updateProjectiles(Projectile **projectile_list, Enemy **enemy_list, Tower *tower_list, TextElement **text_element_list) {
     Projectile *projectile = *projectile_list; Projectile *tmp;
     Enemy *enemy;
     bool result;
@@ -1550,32 +1653,32 @@ void updateProjectiles(Projectile **projectile_list, Enemy **enemy_list, Tower *
             /* Apply projectile effects */
             switch (projectile->origin->type) {
                 case ARCHER_TOWER:
-                    damageEnemy(projectile->target, 2, enemy_list, tower_list);
+                    result = damageEnemy(projectile->target, 2, enemy_list, tower_list, text_element_list);
                     break;
                 case WALL_TOWER:
                     break;
                 case BARRACK_TOWER:
                     break;
                 case SOLIDER_TOWER:
-                    damageEnemy(projectile->target, 2, enemy_list, tower_list);
+                    damageEnemy(projectile->target, 2, enemy_list, tower_list, text_element_list);
                     break;
                 case CANON_TOWER:
-                    damageEnemy(projectile->target, 9, enemy_list, tower_list);
+                    damageEnemy(projectile->target, 9, enemy_list, tower_list, text_element_list);
                     break;
                 case DESTROYER_TOWER:
-                    damageEnemy(projectile->target, 10, enemy_list, tower_list);
+                    damageEnemy(projectile->target, 10, enemy_list, tower_list, text_element_list);
                     /* Area damage */
                     for (int dy = -1; dy <= 1; dy++) for (int dx = -1; dx <= 1; dx++) if (dx || dy)
                         if (getEnemyAndTowerAt(*enemy_list, NULL, projectile->target->collumn + dx, projectile->target->row + dy, &enemy, NULL))
-                            damageEnemy(enemy, 4, enemy_list, tower_list);
+                            damageEnemy(enemy, 4, enemy_list, tower_list, text_element_list);
                     break;
                 case SORCERER_TOWER:
-                    result = damageEnemy(projectile->target, 3, enemy_list, tower_list);
+                    result = damageEnemy(projectile->target, 3, enemy_list, tower_list, text_element_list);
                     /* Enemy slowdown on hit */
                     if (result && projectile->target) projectile->target->speed = min(max(projectile->target->speed - 1, 1), projectile->target->speed);
                     break;
                 case MAGE_TOWER:
-                    result = damageEnemy(projectile->target, 3, enemy_list, tower_list);
+                    result = damageEnemy(projectile->target, 3, enemy_list, tower_list, text_element_list);
                     /* Enemy slowdown on hit */
                     if (result && projectile->target) projectile->target->speed = min(max(projectile->target->speed - 1, 1), projectile->target->speed);
                     break;
@@ -1918,6 +2021,7 @@ int main(int argc, char* argv[]) {
     Enemy *enemy; Tower *tower; bool condition;
     int nb_turns=0,funds=0;
     funds+=waves[0]->income;
+    TextElement *text_element_list = NULL;
     int game_phase = PRE_WAVE_PHASE;
     Enemy *currently_acting_enemy = NULL; Tower *currently_acting_tower = NULL;
     int cam_x_speed = 0, cam_y_speed = 0, cam_speed_mult = 0;
@@ -2155,8 +2259,8 @@ int main(int argc, char* argv[]) {
         }
 
         /* Update entities */
-        updateProjectiles(&projectile_list, &enemy_list, tower_list);
-        updateEnemies(&currently_acting_enemy, &enemy_list, &tower_list);
+        updateProjectiles(&projectile_list, &enemy_list, tower_list, &text_element_list);
+        updateEnemies(&currently_acting_enemy, &enemy_list, &tower_list, &text_element_list);
         updateTowers(&currently_acting_tower, &tower_list, enemy_list, &projectile_list);
 
         /* Clear screen */
@@ -2166,13 +2270,18 @@ int main(int argc, char* argv[]) {
         /* Move camera */
         CAM_POS_X += BASE_CAM_SPEED * cam_x_speed * power(CAM_SPEED_MULT, cam_speed_mult) * power(1.4142/2, cam_x_speed && cam_y_speed) / CAM_SCALE;
         CAM_POS_Y += BASE_CAM_SPEED * cam_y_speed * power(CAM_SPEED_MULT, cam_speed_mult) * power(1.4142/2, cam_x_speed && cam_y_speed) / CAM_SCALE;
+
         /* Draw elements */
         // drawImgStatic(rend,background,0,0,WINDOW_WIDTH,WINDOW_HEIGHT,NULL);
+        /* Draw grass tiles */
         for (int y = 0; y < NB_ROWS; y++) for (int x = 0; x < NB_COLLUMNS; x++) {
                 drawImgDynamic(rend, grass_tiles[x%2 + (y%2) * 2], TILE_WIDTH * x, TILE_HEIGHT * y, SPRITE_SIZE, SPRITE_SIZE, NULL);
         }
+        /* Draw entities */
         drawEnemiesAndTowers(rend, enemy_list, tower_list);
         drawProjectiles(rend, projectile_list);
+        /* Draw damage numbers */
+        drawTextElement(rend, &text_element_list);
         /* Draw the Menu if necessary */
         if (!menu_hidden) {
             drawFilledRect(rend, 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT/4 + 10, 128, 128, 128, 255);
