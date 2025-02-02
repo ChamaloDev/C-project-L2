@@ -973,36 +973,42 @@ Enemy *addEnemy(Enemy **enemy_list, char enemy_type, int spawn_collumn, int spaw
         case SLIME_ENEMY:
             new_enemy->max_life_points = new_enemy->life_points = 5;
             new_enemy->base_speed = new_enemy->speed = 2;
+            new_enemy->base_ability_cooldown = new_enemy->ability_cooldown = 1;
             new_enemy->sprite = loadImg("enemies/Slime");
             new_enemy->score_on_kill = 50;
             break;
         case GELLY_ENEMY:
             new_enemy->max_life_points = new_enemy->life_points = 6;
             new_enemy->base_speed = new_enemy->speed = 2;
+            new_enemy->base_ability_cooldown = new_enemy->ability_cooldown = 1;
             new_enemy->sprite = loadImg("enemies/Gelly");
             new_enemy->score_on_kill = 100;
             break;
         case GOBLIN_ENEMY:
             new_enemy->max_life_points = new_enemy->life_points = 10;
             new_enemy->base_speed = new_enemy->speed = 3;
+            new_enemy->base_ability_cooldown = new_enemy->ability_cooldown = 1;
             new_enemy->sprite = loadImg("enemies/Goblin");
             new_enemy->score_on_kill = 70;
             break;
         case ORC_ENEMY:
             new_enemy->max_life_points = new_enemy->life_points = 20;
             new_enemy->base_speed = new_enemy->speed = 1;
+            new_enemy->base_ability_cooldown = new_enemy->ability_cooldown = 1;
             new_enemy->sprite = loadImg("enemies/Orc");
             new_enemy->score_on_kill = 150;
             break;
         case NECROMANCER_ENEMY:
             new_enemy->max_life_points = new_enemy->life_points = 13;
             new_enemy->base_speed = new_enemy->speed = 1;
+            new_enemy->base_ability_cooldown = new_enemy->ability_cooldown = 3;
             new_enemy->sprite = loadImg("enemies/necromancer");
             new_enemy->score_on_kill = 175;
             break;
         case SKELETON_ENEMY:
             new_enemy->max_life_points = new_enemy->life_points = 3;
             new_enemy->base_speed = new_enemy->speed = 2;
+            new_enemy->base_ability_cooldown = new_enemy->ability_cooldown = 1;
             new_enemy->sprite = loadImg("enemies/skeleton");
             new_enemy->score_on_kill = 20;
             break;
@@ -1016,9 +1022,9 @@ Enemy *addEnemy(Enemy **enemy_list, char enemy_type, int spawn_collumn, int spaw
     updateLifeBarTextElement(&new_enemy->life_bar, new_enemy->life_points, new_enemy->max_life_points);
     /* If health is manualy set */
     if (!enemy_list) return new_enemy;
-	if (life_points != -1){
-		new_enemy->life_points = life_points;
-	}
+    if (life_points != -1){
+        new_enemy->life_points = life_points;
+    }
     /* Add the new enemy to the enemy list */
     /* If empty then no search is needed */
     if (!(*enemy_list)) {
@@ -1221,23 +1227,11 @@ void enemyAttack(Enemy *enemy, Tower **tower_list, Enemy **enemy_list, TextEleme
             if (tower) result = damageTower(tower, 5, tower_list, text_element_list);
             break;
         case NECROMANCER_ENEMY:
-        	if (tower){
-                result = damageTower(tower, 2, tower_list,text_element_list);
-                if (result) {
-                    setAnimAttack(enemy->anim, -1);
-                    enemy->speed = 0;
-                }
-        	}
-        	break;
-       	case SKELETON_ENEMY:
-        	if (tower){
-                result = damageTower(tower, 1, tower_list,text_element_list);
-                if (result) {
-                    setAnimAttack(enemy->anim, -1);
-                    enemy->speed = 0;
-                }
-        	}
-        	break;
+            if (tower) result = damageTower(tower, 2, tower_list,text_element_list);
+            break;
+           case SKELETON_ENEMY:
+            if (tower) result = damageTower(tower, 1, tower_list,text_element_list);
+            break;
         default:  /* Unknown enemy type */
             printf("[ERROR]    Unknown enemy type '%c'\n", enemy->type);
             destroyEnemy(enemy, enemy_list);
@@ -1277,7 +1271,7 @@ bool damageEnemy(Enemy *enemy, int amount, Enemy **enemy_list, Tower *tower_list
     /* Kill enemy if health reaches 0 or less */
     if (enemy->life_points <= 0) {
         n = enemy->type; x = enemy->collumn; y = enemy->row;
-		*score+=enemy->score_on_kill;
+        *score+=enemy->score_on_kill;
         destroyEnemy(enemy, enemy_list);
         /* Gelly splits into 2 slimes on death, one above and one bellow + one at current position or behind if a slime spawn position is blocked */
         if (n == GELLY_ENEMY) {
@@ -1386,10 +1380,10 @@ Tower *addTower(Tower **tower_list, Enemy *enemy_list, char tower_type, int plac
     /* Initialize life bar */
     updateLifeBarTextElement(&new_tower->life_bar, new_tower->life_points, new_tower->max_life_points);
     /* If health is manually set */
-	if (life_points !=-1){
-		new_tower->life_points = life_points;
-	}
-	if (!tower_list) return new_tower;
+    if (life_points !=-1){
+        new_tower->life_points = life_points;
+    }
+    if (!tower_list) return new_tower;
     /* Add the tower to the list of towers */
     if (!(*tower_list)) {
         *tower_list = new_tower;
@@ -1888,8 +1882,10 @@ bool loadLevel(const char *path, Wave ***waves, int *nb_waves) {
     fclose(file);
     return true;
 }
+
+/* Save the game */
 bool SaveGame(const char *name,Enemy **enemy_list, Tower **tower_list,const char *level_name,int wave_nb,int funds,int score){
-	/* Save the game in a text file*/
+    /* Save the game in a text file*/
     char *partial_path = concatString("../assets/saves/", name);
     char *full_path = concatString(partial_path, ".txt");
     FILE *file = fopen(full_path, "w");
@@ -1904,13 +1900,13 @@ bool SaveGame(const char *name,Enemy **enemy_list, Tower **tower_list,const char
     /* we add all the tower and the enemy file with all their caracteristics */
     Tower *currentT = *tower_list;
     while(currentT){
-    	fprintf(file,"T %c %d %d %d\n",currentT->type,currentT->row,currentT->collumn,currentT->life_points);
-    	currentT = currentT->next;
+        fprintf(file,"T %c %d %d %d\n",currentT->type,currentT->row,currentT->collumn,currentT->life_points);
+        currentT = currentT->next;
     }
     Enemy *currentE = *enemy_list;
     while(currentE){
-    	fprintf(file,"E %c %d %d %d\n",currentE->type,currentE->row,currentE->collumn,currentE->life_points);
-    	currentE = currentE->next;
+        fprintf(file,"E %c %d %d %d\n",currentE->type,currentE->row,currentE->collumn,currentE->life_points);
+        currentE = currentE->next;
     }
     free(full_path);
     fclose(file);
@@ -1918,7 +1914,7 @@ bool SaveGame(const char *name,Enemy **enemy_list, Tower **tower_list,const char
 }
 
 bool loadSave(const char *save,Enemy **enemy_list,Tower **tower_list,char **level_name,int *funds,int *actual_wave,int *score){
-	/* Openning text file */
+    /* Openning text file */
     char *partial_path = concatString("../assets/saves/", save);
     char *full_path = concatString(partial_path, ".txt");
     FILE *file = fopen(full_path, "r");
@@ -1939,19 +1935,19 @@ bool loadSave(const char *save,Enemy **enemy_list,Tower **tower_list,char **leve
                 break;
             /*header */
             case 4:
-            	*level_name = (char *)malloc(strlen(values[0]) + 1);
-           		strcpy(*level_name,values[0]); //not sure
-           		*actual_wave = stringToInt(values[1]);
-           		*funds = stringToInt(values[2]);
-           		*score = stringToInt(values[3]);
+                *level_name = (char *)malloc(strlen(values[0]) + 1);
+                   strcpy(*level_name,values[0]); //not sure
+                   *actual_wave = stringToInt(values[1]);
+                   *funds = stringToInt(values[2]);
+                   *score = stringToInt(values[3]);
                 break;
             /* add tower and enemy */
             case 5:
-            	if (strcmp(values[0],"E")==0){
-                	addEnemy(enemy_list, stringToInt(values[1]), stringToInt(values[2]), stringToInt(values[3]),stringToInt(values[4]));
+                if (strcmp(values[0],"E")==0){
+                    addEnemy(enemy_list, stringToInt(values[1]), stringToInt(values[2]), stringToInt(values[3]),stringToInt(values[4]));
                 }
                 else if (strcmp(values[0],"T")==0){
-                	addTower(tower_list,*enemy_list, stringToInt(values[1]), stringToInt(values[2]), stringToInt(values[3]),stringToInt(values[4]));
+                    addTower(tower_list,*enemy_list, stringToInt(values[1]), stringToInt(values[2]), stringToInt(values[3]),stringToInt(values[4]));
                 }
                 break;
             /* Invalid value count on line */
@@ -2184,17 +2180,17 @@ int main(int argc, char* argv[]) {
     while (running) {
         /* Process events */
         if (enemy_list == NULL){
-			if (actual_wave<nb_waves){
-				game_phase = PRE_WAVE_PHASE;
-				funds+=waves[actual_wave]->income;
-				enemy_list=waves[actual_wave]->enemies;
-				actual_wave+=1;
-			}
-			else{
-				drawTextElement(rend, &win_text_surface);
-				return 0;
-			}
-		}
+            if (actual_wave<nb_waves){
+                game_phase = PRE_WAVE_PHASE;
+                funds+=waves[actual_wave]->income;
+                enemy_list=waves[actual_wave]->enemies;
+                actual_wave+=1;
+            }
+            else{
+                drawTextElement(rend, &win_text_surface);
+                return 0;
+            }
+        }
         while (SDL_PollEvent(&event)) {
             switch (event.type) {
                 /* Quit the game */
@@ -2234,8 +2230,8 @@ int main(int argc, char* argv[]) {
                             cam_x_speed = +1;
                             break;
                         case SDL_SCANCODE_X:
-                        	SaveGame("save1",&enemy_list,&tower_list,"level_test.txt",actual_wave,funds,score);
-                        	break;
+                            SaveGame("save1",&enemy_list,&tower_list,"level_test.txt",actual_wave,funds,score);
+                            break;
                         case SDL_SCANCODE_LSHIFT:
                             cam_speed_mult = +1;
                             break;
@@ -2305,8 +2301,8 @@ int main(int argc, char* argv[]) {
                                     menu_hidden = true;
                                 }
                                 else if (SPRITE_SIZE/2 <= event.button.x && event.button.x <= 2*SPRITE_SIZE/2 && 0 <= event.button.y && event.button.y <= SPRITE_SIZE/2){
-                                	sellTower(towerOnTile, &tower_list, &funds);
-                                	menu_hidden = true;
+                                    sellTower(towerOnTile, &tower_list, &funds);
+                                    menu_hidden = true;
                                 }
                                 else if (0 <= event.button.x && event.button.x <= SPRITE_SIZE/2 && 0 <= event.button.y && event.button.y <= SPRITE_SIZE/2){
                                     /* Clicked on the turret upgrade */
@@ -2477,7 +2473,7 @@ int main(int argc, char* argv[]) {
                         drawImgStatic(rend, towers_upgrades[1], 0, 0, SPRITE_SIZE/2, SPRITE_SIZE/2, NULL);
                         break;
                     case WALL_TOWER:
-                    	drawImgStatic(rend, towers_upgrades[2], 0, 0, SPRITE_SIZE/2, SPRITE_SIZE/2, NULL);
+                        drawImgStatic(rend, towers_upgrades[2], 0, 0, SPRITE_SIZE/2, SPRITE_SIZE/2, NULL);
                         break;
                     default:
                         break;
@@ -2494,7 +2490,7 @@ int main(int argc, char* argv[]) {
     }
     
     /* Free allocated memory */
-    delImg(delete_tower);free(quit_menu);
+    delImg(delete_tower); //free(quit_menu);
     delImg(towers[3]);delImg(towers[2]);delImg(towers[1]);delImg(towers[0]);
     delImg(grass_tiles[3]); delImg(grass_tiles[2]); delImg(grass_tiles[1]); delImg(grass_tiles[0]);
     delImg(towers_upgrades[0]);delImg(towers_upgrades[1]);delImg(towers_upgrades[2]);
