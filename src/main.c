@@ -2528,7 +2528,7 @@ int main(int argc, char* argv[]) {
     }
     
     /* Free allocated memory */
-    delImg(delete_tower); // free(quit_menu); [CRASH THE GAME]
+    delImg(delete_tower); delImg(quit_menu);
     delImg(towers[3]); delImg(towers[2]); delImg(towers[1]); delImg(towers[0]);
     delImg(grass_tiles[3]); delImg(grass_tiles[2]); delImg(grass_tiles[1]); delImg(grass_tiles[0]);
     delImg(towers_upgrades[0]); delImg(towers_upgrades[1]); delImg(towers_upgrades[2]);
