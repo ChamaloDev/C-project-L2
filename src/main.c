@@ -132,6 +132,7 @@
 #define char_antislash '\\'
 #define char_left_bracket '('
 #define char_right_bracket ')'
+#define char_heart '&'
 
 
 
@@ -159,11 +160,22 @@ typedef struct {
     int *data;          // Additionnal data given to the animation
 } Animation;
 
+/* Text element */
+typedef struct text_element {
+    double scale;         // Text size scaling
+    SDL_Rect rect;        // Rect of the text element
+    bool dynamic_pos;     // Should the position of the text element be static or dynamic
+    bool centered;        // Should the text element be centered or aligned to the left
+    SDL_Surface *sprite;  // Sprite of the text element
+    Animation *anim;      // Animation of the text element
+    struct text_element *next;
+} TextElement;
+
 /* Towers */
 typedef struct tower {
     int type;                  // Tower type, determine it's abilities, look and upgrades
-    int max_live_points;       // Maximum live points of the tower
-    int live_points;           // Live points of the tower, when it reaches 0 or bellow the tower is destroyed
+    int max_life_points;       // Maximum life points of the tower
+    int life_points;           // Life points of the tower, when it reaches 0 or bellow the tower is destroyed
     int row;                   // Row number of the tower, 0 being the topmost row
     int collumn;               // Collumn number of the tower, 0 being the leftmost collumn
     int cost;                  // Placement cost of the tower
@@ -172,13 +184,14 @@ typedef struct tower {
     struct tower* next;        // Pointer to the next tower placed
     SDL_Surface *sprite;       // Sprite of the tower
     Animation *anim;           // Animation of the tower
+    TextElement *life_bar;     // Life bar of the tower
 } Tower;
 
 /* Enemies */
 typedef struct enemy {
     int type;                   // Enemy type, determine it's abilities and look
-    int max_live_points;        // Maximum live points of the enemy
-    int live_points;            // Live points of the enemy, when it reaches 0 or bellow the enemy is defeated
+    int max_life_points;        // Maximum life points of the enemy
+    int life_points;            // Life points of the enemy, when it reaches 0 or bellow the enemy is defeated
     int row;                    // Row number of the enemy, 0 being the topmost row
     int collumn;                // Collumn number of the enemy, 0 being the leftmost collumn
     int base_speed;             // Base number of collumn travelled per turn
@@ -190,6 +203,7 @@ typedef struct enemy {
     struct enemy* prev_on_row;  // Previous enemy on the same row (in front of this)
     SDL_Surface *sprite;        // Sprite of the enemy
     Animation *anim;            // Animation of the enemy
+    TextElement *life_bar;      // Life bar of the enemy
 } Enemy;
 
 /* Projectile shoot by a tower */
@@ -214,17 +228,6 @@ typedef struct {
     int funds;       // Availible funds to build tower
     int turn_nb;     // Turn number
 } Game;
-
-/* Text element */
-typedef struct text_element {
-    double scale;         // Text size scaling
-    SDL_Rect rect;        // Rect of the text element
-    bool dynamic_pos;     // Should the position of the text element be static or dynamic
-    bool centered;        // Should the text element be centered or aligned to the left
-    SDL_Surface *sprite;  // Sprite of the text element
-    Animation *anim;      // Animation of the text element
-    struct text_element *next;
-} TextElement;
 
 
 
@@ -413,7 +416,7 @@ SDL_Surface *textSurface(char *text, SDL_Color main_color, SDL_Color outline_col
         else {
             /* Load the character */
             character = NULL;
-            switch (*c) {
+            switch ((int) *c) {
                 case char_0:
                     character = loadImg("font/char_0");
                     break;
@@ -648,6 +651,9 @@ SDL_Surface *textSurface(char *text, SDL_Color main_color, SDL_Color outline_col
                 case char_right_bracket:
                     character = loadImg("font/char_right_bracket");
                     break;
+                case char_heart:
+                    character = loadImg("font/char_heart");
+                    break;
                 default:
                     character = NULL;
                     break;
@@ -818,6 +824,7 @@ TextElement *addTextElement(TextElement **text_element_list, char *text, double 
     /* Load the text sprite */
     new_text_element->sprite = textSurface(text, main_color, outline_color);
     /* Add it to the list */
+    if (!text_element_list) return new_text_element;
     if (!(*text_element_list)) {
         *text_element_list = new_text_element;
         return new_text_element;
@@ -830,13 +837,15 @@ TextElement *addTextElement(TextElement **text_element_list, char *text, double 
 
 /* Destroy a text element */
 void destroyTextElement(TextElement **text_element_list, TextElement *text_element) {
-    if (!text_element || !text_element_list) return;
+    if (!text_element) return;
     /* Modify pointers */
-    if (*text_element_list == text_element) *text_element_list = text_element->next;
-    else {
-        TextElement *current = *text_element_list;
-        while (current && current->next != text_element) current = current->next;
-        if (current) current->next = text_element->next;
+    if (text_element_list) {
+        if (*text_element_list == text_element) *text_element_list = text_element->next;
+        else {
+            TextElement *current = *text_element_list;
+            while (current && current->next != text_element) current = current->next;
+            if (current) current->next = text_element->next;
+        }
     }
     /* Free memory */
     if (text_element->sprite) SDL_FreeSurface(text_element->sprite);
@@ -889,6 +898,25 @@ TextElement *addDamageNumber(TextElement **text_element_list, int amount, int co
     return addTextElement(text_element_list, text, 2.0, main_color, outline_color, rect, true, true, anim);
 }
 
+/* Generate a new text element representing the life points of an entity, destroying the previous one */
+TextElement *updateLifeBarTextElement(TextElement **text_element, int current_life_points, int max_life_points) {
+    if (!text_element || current_life_points > max_life_points || max_life_points <= 0) return NULL;
+    /* Free previous text element representing the life bar */
+    if (*text_element) destroyTextElement(NULL, *text_element);
+    /* Text value for the new text element */
+    char text_value[1000];
+    sprintf(text_value, "%d/%d&", current_life_points, max_life_points);
+    /* Colors */
+    double life_ratio = max(0, current_life_points)/max_life_points;
+    SDL_Color main_color = {(int) 255.0 * (1 - power(life_ratio, 2)), (int) 255.0 * (1.0 - power(1 - life_ratio, 2)), 0, 255};
+    SDL_Color outline_color = {main_color.r/2, main_color.g/2, 0, 255};
+    /* Create new text element representing the life bar */
+    SDL_Rect rect = {0, 0, SPRITE_SIZE, 48};
+    *text_element = addTextElement(NULL, text_value, 1.0, main_color, outline_color, rect, true, true, NULL);
+    return *text_element;
+}
+
+
 
 
 
@@ -929,7 +957,6 @@ bool doesTileExist(int collumn, int row) {
 
 /* Add an enemy to the list of enemies, fail if cannot spawn enemy at specified location or if enemy type is not defined */
 Enemy *addEnemy(Enemy **enemy_list, char enemy_type, int spawn_collumn, int spawn_row) {
-    if (!enemy_list) return NULL;
     /* Can't summon enemies in not existing rows */
     if (1 > spawn_row || spawn_row > NB_ROWS) return NULL;
 
@@ -940,25 +967,26 @@ Enemy *addEnemy(Enemy **enemy_list, char enemy_type, int spawn_collumn, int spaw
     new_enemy->row = spawn_row;
     new_enemy->next = new_enemy->next_on_row = new_enemy->prev_on_row = NULL;
     new_enemy->anim = newAnim();
+    new_enemy->life_bar = NULL;
     /* Match the enemy type to its stats */
     switch (enemy_type) {
         case SLIME_ENEMY:
-            new_enemy->max_live_points = new_enemy->live_points = 5;
+            new_enemy->max_life_points = new_enemy->life_points = 5;
             new_enemy->base_speed = new_enemy->speed = 2;
             new_enemy->sprite = loadImg("enemies/Slime");
             break;
         case GELLY_ENEMY:
-            new_enemy->max_live_points = new_enemy->live_points = 6;
+            new_enemy->max_life_points = new_enemy->life_points = 6;
             new_enemy->base_speed = new_enemy->speed = 2;
             new_enemy->sprite = loadImg("enemies/Gelly");
             break;
         case GOBLIN_ENEMY:
-            new_enemy->max_live_points = new_enemy->live_points = 10;
+            new_enemy->max_life_points = new_enemy->life_points = 10;
             new_enemy->base_speed = new_enemy->speed = 3;
             new_enemy->sprite = loadImg("enemies/Goblin");
             break;
         case ORC_ENEMY:
-            new_enemy->max_live_points = new_enemy->live_points = 20;
+            new_enemy->max_life_points = new_enemy->life_points = 20;
             new_enemy->base_speed = new_enemy->speed = 1;
             new_enemy->sprite = loadImg("enemies/Orc");
             break;
@@ -968,7 +996,10 @@ Enemy *addEnemy(Enemy **enemy_list, char enemy_type, int spawn_collumn, int spaw
             free(new_enemy);
             return NULL;
     }
+    /* Initialize life bar */
+    updateLifeBarTextElement(&new_enemy->life_bar, new_enemy->life_points, new_enemy->max_life_points);
 
+    if (!enemy_list) return new_enemy;
     /* Add the new enemy to the enemy list */
     /* If empty then no search is needed */
     if (!(*enemy_list)) {
@@ -1006,21 +1037,24 @@ Enemy *addEnemy(Enemy **enemy_list, char enemy_type, int spawn_collumn, int spaw
 
 /* Destroy an enemy and free its allocated memory */
 void destroyEnemy(Enemy *enemy, Enemy **enemy_list) {
-    if (!enemy || !enemy_list || !(*enemy_list)) return;
+    if (!enemy) return;
     /* Change pointers of enemies accordingly */
-    if (*enemy_list == enemy) {
-        *enemy_list = enemy->next;
-    }
-    else {
-        Enemy *prev_enemy = *enemy_list;
-        while (prev_enemy && prev_enemy->next != enemy) prev_enemy = prev_enemy->next;
-        if (prev_enemy) prev_enemy->next = enemy->next;
+    if (enemy_list) {
+        if (*enemy_list == enemy) {
+            *enemy_list = enemy->next;
+        }
+        else {
+            Enemy *prev_enemy = *enemy_list;
+            while (prev_enemy && prev_enemy->next != enemy) prev_enemy = prev_enemy->next;
+            if (prev_enemy) prev_enemy->next = enemy->next;
+        }
     }
     if (enemy->prev_on_row) enemy->prev_on_row->next_on_row = enemy->next_on_row;
     if (enemy->next_on_row) enemy->next_on_row->prev_on_row = enemy->prev_on_row;
     /* Destroy enemy data */
     if (enemy->sprite) delImg(enemy->sprite);
     if (enemy->anim) destroyAnim(enemy->anim);
+    if (enemy->life_bar) destroyTextElement(NULL, enemy->life_bar);
     free(enemy);
 }
 
@@ -1104,8 +1138,8 @@ int moveEnemy(Enemy *enemy, Enemy *enemy_list, Tower *tower_list, int delta, cha
 void updateEnemies(Enemy **currently_acting_enemy, Enemy **enemy_list, Tower **tower_list, TextElement **text_element_list) {
     Enemy *enemy;// = *enemy_list; Enemy *tmp;
     // while (enemy) {
-    //     /* Destroy enemy when live points are bellow 0 */
-    //     if (enemy->live_points <= 0) {
+    //     /* Destroy enemy when life points are bellow 0 */
+    //     if (enemy->life_points <= 0) {
     //         tmp = enemy->next;
     //         destroyEnemy(enemy, enemy_list);
     //         enemy = tmp;
@@ -1198,11 +1232,12 @@ bool damageEnemy(Enemy *enemy, int amount, Enemy **enemy_list, Tower *tower_list
     /* Show damage number */
     if (text_element_list) addDamageNumber(text_element_list, amount, enemy->collumn, enemy->row);
     /* Damage enemy */
-    enemy->live_points -= amount;
+    enemy->life_points -= amount;
     setAnimHurt(enemy->anim);
-
+    /* Update life bar */
+    updateLifeBarTextElement(&enemy->life_bar, enemy->life_points, enemy->max_life_points);
     /* Kill enemy if health reaches 0 or less */
-    if (enemy->live_points <= 0) {
+    if (enemy->life_points <= 0) {
         n = enemy->type; x = enemy->collumn; y = enemy->row;
         destroyEnemy(enemy, enemy_list);
         /* Gelly splits into 2 slimes on death, one above and one bellow + one at current position or behind if a slime spawn position is blocked */
@@ -1223,7 +1258,7 @@ bool damageEnemy(Enemy *enemy, int amount, Enemy **enemy_list, Tower *tower_list
     /* Goblin changes row on hit, depending on its hp left */
     if (enemy->type == GOBLIN_ENEMY) {
         n = 0;
-        if (enemy->live_points % 2) {
+        if (enemy->life_points % 2) {
             n = moveEnemy(enemy, *enemy_list, tower_list, 1, 'y');
             if (!n) n = moveEnemy(enemy, *enemy_list, tower_list, -1, 'y');
         }
@@ -1254,51 +1289,52 @@ Tower *addTower(Tower **tower_list, Enemy *enemy_list, char tower_type, int plac
     new_tower->attack_cooldown = 1;
     new_tower->next = NULL;
     new_tower->anim = newAnim();
+    new_tower->life_bar = NULL;
     switch (tower_type){
         case ARCHER_TOWER:
-            new_tower->max_live_points = new_tower->live_points = 6;
+            new_tower->max_life_points = new_tower->life_points = 6;
             new_tower->cost = 50;
             new_tower->base_attack_cooldown = 1;
             new_tower->sprite = loadImg("towers/Archer_tower");
             break;
         case WALL_TOWER:
-            new_tower->max_live_points = new_tower->live_points = 10;
+            new_tower->max_life_points = new_tower->life_points = 10;
             new_tower->cost = 30;
             new_tower->base_attack_cooldown = 1;
             new_tower->sprite = loadImg("towers/Empty_tower");
             break;
         case BARRACK_TOWER:
-            new_tower->max_live_points = new_tower->live_points = 15;
+            new_tower->max_life_points = new_tower->life_points = 15;
             new_tower->cost = 70;
             new_tower->base_attack_cooldown = 5;
             new_tower->sprite = loadImg("towers/barracks");
             break;
         case SOLIDER_TOWER:
-            new_tower->max_live_points = new_tower->live_points = 3;
+            new_tower->max_life_points = new_tower->life_points = 3;
             new_tower->cost = 0;
             new_tower->base_attack_cooldown = 1;
             new_tower->sprite = loadImg("towers/Spearman");
             break;
         case CANON_TOWER:
-            new_tower->max_live_points = new_tower->live_points = 4;
+            new_tower->max_life_points = new_tower->life_points = 4;
             new_tower->cost = 100;
             new_tower->base_attack_cooldown = 3;
             new_tower->sprite = loadImg("towers/canon");
             break;
         case DESTROYER_TOWER:
-            new_tower->max_live_points = new_tower->live_points = 8;
+            new_tower->max_life_points = new_tower->life_points = 8;
             new_tower->cost = 120;
             new_tower->base_attack_cooldown = 3;
             new_tower->sprite = loadImg("towers/canon_evolved");
             break;
         case SORCERER_TOWER:
-            new_tower->max_live_points = new_tower->live_points = 5;
+            new_tower->max_life_points = new_tower->life_points = 5;
             new_tower->cost = 70;
             new_tower->base_attack_cooldown = 2;
             new_tower->sprite = loadImg("towers/sorcerer");
             break;
         case MAGE_TOWER:
-            new_tower->max_live_points = new_tower->live_points = 7;
+            new_tower->max_life_points = new_tower->life_points = 7;
             new_tower->cost = 100;
             new_tower->base_attack_cooldown = 2;
             new_tower->sprite = loadImg("towers/sorcerer_evolved");
@@ -1308,7 +1344,10 @@ Tower *addTower(Tower **tower_list, Enemy *enemy_list, char tower_type, int plac
             destroyTower(new_tower, tower_list);
             return NULL;
     }
+    /* Initialize life bar */
+    updateLifeBarTextElement(&new_tower->life_bar, new_tower->life_points, new_tower->max_life_points);
 
+    if (!tower_list) return new_tower;
     /* Add the tower to the list of towers */
     if (!(*tower_list)) {
         *tower_list = new_tower;
@@ -1388,19 +1427,22 @@ Tower *upgradeTower(Tower **tower_list, Enemy *enemy_list, char tower_type, int 
 
 /* Destroy an tower and free its allocated memory */
 void destroyTower(Tower *tower, Tower **tower_list) {
-    if (!tower || !tower_list || !(*tower_list)) return;
+    if (!tower) return;
     /* Change pointers of tower accordingly */
-    Tower *prev_tower = *tower_list;
-    if (prev_tower == tower) {
-        *tower_list = tower->next;
-    }
-    else {
-        while (prev_tower && prev_tower->next != tower) prev_tower = prev_tower->next;
-        if (prev_tower) prev_tower->next = tower->next;
+    if (tower_list) {
+        Tower *prev_tower = *tower_list;
+        if (prev_tower == tower) {
+            *tower_list = tower->next;
+        }
+        else {
+            while (prev_tower && prev_tower->next != tower) prev_tower = prev_tower->next;
+            if (prev_tower) prev_tower->next = tower->next;
+        }
     }
     /* Destroy tower data */
     if (tower->sprite) delImg(tower->sprite);
     if (tower->anim) destroyAnim(tower->anim);
+    if (tower->life_bar) destroyTextElement(NULL, tower->life_bar);
     free(tower);
 }
 
@@ -1506,8 +1548,8 @@ void towerAct(Tower *tower, Tower **tower_list, Enemy *enemy_list, Projectile **
 void updateTowers(Tower **currently_acting_tower, Tower **tower_list, Enemy *enemy_list, Projectile **projectile_list) {
     // Tower *tower = *tower_list; Tower *tmp;
     // while (tower) {
-    //     /* Destroy tower when live points are bellow 0 */
-    //     if (tower->live_points <= 0) {
+    //     /* Destroy tower when life points are bellow 0 */
+    //     if (tower->life_points <= 0) {
     //         tmp = tower->next;
     //         destroyTower(tower, tower_list);
     //         tower = tmp;
@@ -1551,10 +1593,12 @@ bool damageTower(Tower *tower, int amount, Tower **tower_list, TextElement **tex
     /* Show damage number */
     if (text_element_list) addDamageNumber(text_element_list, amount, tower->collumn, tower->row);
     /* Damage tower */
-    tower->live_points -= amount;
+    tower->life_points -= amount;
     setAnimHurt(tower->anim);
+    /* Update life bar */
+    updateLifeBarTextElement(&tower->life_bar, tower->life_points, tower->max_life_points);
     /* Kill tower if health reaches 0 or less */
-    if (tower->live_points <= 0) destroyTower(tower, tower_list);
+    if (tower->life_points <= 0) destroyTower(tower, tower_list);
     return true;
 }
 
@@ -1813,6 +1857,7 @@ void drawEnemiesAndTowers(SDL_Renderer *rend, Enemy *enemy_list, Tower *tower_li
     Enemy **first_of_each_row = getFirstEnemyOfAllRows(enemy_list);
     Enemy *enemy; Tower *tower;
     SDL_Rect dest;
+    int w, h;
     /* Draw from top to bottom */
     for (int row_nb = 1; row_nb <= NB_ROWS; row_nb++) {
         /* Draw enemies on the current row */
@@ -1820,6 +1865,15 @@ void drawEnemiesAndTowers(SDL_Renderer *rend, Enemy *enemy_list, Tower *tower_li
         while (enemy) {
             dest.x = (enemy->collumn - 1) * TILE_WIDTH; dest.y = (enemy->row - 1) * TILE_HEIGHT; dest.w = SPRITE_SIZE; dest.h = SPRITE_SIZE;
             drawImgDynamic(rend, enemy->sprite, dest.x, dest.y, dest.w, dest.h, enemy->anim);
+            /* Life bar */
+            if (enemy->life_bar) {
+                w = enemy->life_bar->rect.w; h = enemy->life_bar->rect.h;
+                enemy->life_bar->rect.x = dest.x;
+                enemy->life_bar->rect.y = dest.y + SPRITE_SIZE - enemy->life_bar->sprite->h;
+                if (enemy->anim && enemy->anim->type != IDLE_ANIMATION) applyAnim(enemy->anim, &enemy->life_bar->rect);
+                drawTextElement(rend, &enemy->life_bar);
+                enemy->life_bar->rect.w = w; enemy->life_bar->rect.h = h;
+            }
             enemy = enemy->next_on_row;
         }
         /* Draw towers on the current row */
@@ -1828,7 +1882,15 @@ void drawEnemiesAndTowers(SDL_Renderer *rend, Enemy *enemy_list, Tower *tower_li
             if (tower->row == row_nb) {
                 dest.x = (tower->collumn - 1) * TILE_WIDTH; dest.y = (tower->row - 1) * TILE_HEIGHT; dest.w = SPRITE_SIZE; dest.h = SPRITE_SIZE;
                 drawImgDynamic(rend, tower->sprite, dest.x, dest.y, dest.w, dest.h, tower->anim);
-                drawImgDynamic(rend, tower->sprite, dest.x, dest.y, SPRITE_SIZE, SPRITE_SIZE, tower->anim);
+                /* Life bar */
+                if (tower->life_bar) {
+                    w = tower->life_bar->rect.w; h = tower->life_bar->rect.h;
+                    tower->life_bar->rect.x = dest.x;
+                    tower->life_bar->rect.y = dest.y + SPRITE_SIZE - tower->life_bar->sprite->h;
+                    if (tower->anim && tower->anim->type != IDLE_ANIMATION) applyAnim(tower->anim, &tower->life_bar->rect);
+                    drawTextElement(rend, &tower->life_bar);
+                    tower->life_bar->rect.w = w; tower->life_bar->rect.h = h;
+                }
             }
             tower = tower->next;
         }
