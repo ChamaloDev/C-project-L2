@@ -890,11 +890,11 @@ Enemy *addEnemy(Enemy **enemy_list, char enemy_type, int spawn_collumn, int spaw
 void destroyEnemy(Enemy *enemy, Enemy **enemy_list) {
     if (!enemy || !enemy_list || !(*enemy_list)) return;
     /* Change pointers of enemies accordingly */
-    Enemy *prev_enemy = *enemy_list;
-    if (prev_enemy == enemy) {
+    if (*enemy_list == enemy) {
         *enemy_list = enemy->next;
     }
     else {
+        Enemy *prev_enemy = *enemy_list;
         while (prev_enemy && prev_enemy->next != enemy) prev_enemy = prev_enemy->next;
         if (prev_enemy) prev_enemy->next = enemy->next;
     }
@@ -954,8 +954,7 @@ int moveEnemy(Enemy *enemy, Enemy *enemy_list, Tower *tower_list, int delta, cha
         /* Updating pointers */
         if (enemy->next_on_row) enemy->next_on_row->prev_on_row = enemy->prev_on_row;
         if (enemy->prev_on_row) enemy->prev_on_row->next_on_row = enemy->next_on_row;
-        enemy->prev_on_row = NULL;
-        enemy->next_on_row = NULL;
+        enemy->prev_on_row = enemy->next_on_row = NULL;
         enemy->row += delta;
         /* Moving on the y axis */
         Enemy *current = enemy_list;
@@ -970,11 +969,11 @@ int moveEnemy(Enemy *enemy, Enemy *enemy_list, Tower *tower_list, int delta, cha
                     if (!enemy->next_on_row || enemy->next_on_row->collumn > current->collumn) enemy->next_on_row = current;
                 }
             }
-            enemy = enemy->next;
+            current = current->next;
         }
         /* Updating pointers */
-        if (enemy->prev_on_row) enemy->prev_on_row->next_on_row = enemy->next_on_row;
-        if (enemy->next_on_row) enemy->next_on_row->prev_on_row = enemy->prev_on_row;
+        if (enemy->prev_on_row) enemy->prev_on_row->next_on_row = enemy;
+        if (enemy->next_on_row) enemy->next_on_row->prev_on_row = enemy;
         return delta;
     }
 
@@ -1114,14 +1113,15 @@ bool damageEnemy(Enemy *enemy, int amount, Enemy **enemy_list, Tower *tower_list
             else n++;
             if (n-- && isTileEmpty(*enemy_list, tower_list, x + 1, y) && doesTileExist(x + 1, y) && (e = addEnemy(enemy_list, SLIME_ENEMY, x + 1, y))) setAnimMove(e->anim, +1, 0);
             else n++;
-            if (n-- && isTileEmpty(*enemy_list, tower_list, x, y) && doesTileExist(x, y) && (e = addEnemy(enemy_list, SLIME_ENEMY, x, y)));
+            if (n-- && isTileEmpty(*enemy_list, tower_list, x, y) && doesTileExist(x, y) && addEnemy(enemy_list, SLIME_ENEMY, x, y));
             else n++;
-            return true;
         }
+        return true;
     }
 
     /* Goblin changes row on hit, depending on its hp left */
     if (enemy->type == GOBLIN_ENEMY) {
+        n = 0;
         if (enemy->live_points % 2) {
             n = moveEnemy(enemy, *enemy_list, tower_list, 1, 'y');
             if (!n) n = moveEnemy(enemy, *enemy_list, tower_list, -1, 'y');
@@ -2118,6 +2118,7 @@ int main(int argc, char* argv[]) {
                 condition = true; enemy = enemy_list;
                 while (enemy && condition) {
                     if (enemy->anim && enemy->anim->type != IDLE_ANIMATION) condition = false;
+                    
                     enemy = enemy->next;
                 }
                 /* Change phase */
@@ -2173,7 +2174,7 @@ int main(int argc, char* argv[]) {
         drawEnemiesAndTowers(rend, enemy_list, tower_list);
         drawProjectiles(rend, projectile_list);
         /* Draw the Menu if necessary */
-        if (!menu_hidden){ 
+        if (!menu_hidden) {
             drawFilledRect(rend, 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT/4 + 10, 128, 128, 128, 255);
             drawRect(rend, 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT/4 + 10, 255, 255, 255, 255);
 
