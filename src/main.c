@@ -1224,7 +1224,7 @@ void makeAllEnemiesAct(Enemy *enemy_list, Enemy **currently_acting_enemy) {
 }
 
 /* Damage an enemy */
-bool damageEnemy(Enemy *enemy, int amount, Enemy **enemy_list, Tower *tower_list, TextElement **text_element_list) {
+bool damageEnemy(Enemy *enemy, int amount, Enemy **enemy_list, Tower *tower_list, TextElement **text_element_list,int *score) {
     if (!enemy || !amount || !enemy_list) return false;
     int n, x, y;
 
@@ -1241,6 +1241,7 @@ bool damageEnemy(Enemy *enemy, int amount, Enemy **enemy_list, Tower *tower_list
     /* Kill enemy if health reaches 0 or less */
     if (enemy->live_points <= 0) {
         n = enemy->type; x = enemy->collumn; y = enemy->row;
+	*score+=enemy->points;
         destroyEnemy(enemy, enemy_list);
         /* Gelly splits into 2 slimes on death, one above and one bellow + one at current position or behind if a slime spawn position is blocked */
         if (n == GELLY_ENEMY) {
@@ -1692,32 +1693,32 @@ void updateProjectiles(Projectile **projectile_list, Enemy **enemy_list, Tower *
             /* Apply projectile effects */
             switch (projectile->origin->type) {
                 case ARCHER_TOWER:
-                    result = damageEnemy(projectile->target, 2, enemy_list, tower_list, text_element_list);
+                    damageEnemy(projectile->target, 2, enemy_list, tower_list,score);
                     break;
                 case WALL_TOWER:
                     break;
                 case BARRACK_TOWER:
                     break;
                 case SOLIDER_TOWER:
-                    damageEnemy(projectile->target, 2, enemy_list, tower_list, text_element_list);
+                    damageEnemy(projectile->target, 2, enemy_list, tower_list,score);
                     break;
                 case CANON_TOWER:
-                    damageEnemy(projectile->target, 9, enemy_list, tower_list, text_element_list);
+                    damageEnemy(projectile->target, 9, enemy_list, tower_list,score);
                     break;
                 case DESTROYER_TOWER:
-                    damageEnemy(projectile->target, 10, enemy_list, tower_list, text_element_list);
+                    damageEnemy(projectile->target, 10, enemy_list, tower_list,score);
                     /* Area damage */
                     for (int dy = -1; dy <= 1; dy++) for (int dx = -1; dx <= 1; dx++) if (dx || dy)
                         if (getEnemyAndTowerAt(*enemy_list, NULL, projectile->target->collumn + dx, projectile->target->row + dy, &enemy, NULL))
-                            damageEnemy(enemy, 4, enemy_list, tower_list, text_element_list);
+                            damageEnemy(enemy, 4, enemy_list, tower_list,score);
                     break;
                 case SORCERER_TOWER:
-                    result = damageEnemy(projectile->target, 3, enemy_list, tower_list, text_element_list);
+                    result = damageEnemy(projectile->target, 3, enemy_list, tower_list,score);
                     /* Enemy slowdown on hit */
                     if (result && projectile->target) projectile->target->speed = min(max(projectile->target->speed - 1, 1), projectile->target->speed);
                     break;
                 case MAGE_TOWER:
-                    result = damageEnemy(projectile->target, 3, enemy_list, tower_list, text_element_list);
+                    result = damageEnemy(projectile->target, 3, enemy_list, tower_list,score);
                     /* Enemy slowdown on hit */
                     if (result && projectile->target) projectile->target->speed = min(max(projectile->target->speed - 1, 1), projectile->target->speed);
                     break;
