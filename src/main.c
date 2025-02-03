@@ -50,7 +50,7 @@
 #define ENEMIES_ATTACKING_PHASE 3
 #define WAVE_DEAFEATED_PHASE 4
 #define GAME_OVER_PHASE 5
-
+#define END_OF_LEVEL_PHASE 6
 
 
 
@@ -296,7 +296,7 @@ bool hasProjectileReachedTarget(Projectile *projectile);
 void updateProjectiles(Projectile **projectile_list, Enemy **enemy_list, Tower *tower_list, TextElement **text_element_list, int *score);
 void drawProjectiles(SDL_Renderer *rend, Projectile *projectile_list);
 Game *createNewGame(char *level_name);
-Game *loadGameFromSave(char *save_file);
+Game *loadGameFromSave(const char *save_file);
 bool loadNextWave(Game *game);
 void startNextWave(Game *game);
 bool isWhitespace(char c);
@@ -320,6 +320,8 @@ bool saveGame(const char *save_name, Game *game);
 char *DuplicateString(const char *a);
 Game *createNewGameFromSave(char *level_name);
 Game *IsThereASave(const char *nickname);
+void SaveScore(char *nickname,int score);
+void destroyGame(Game *game);
 
 /* Return an integer between a and b (included) */
 int randrange(int a, int b) {
@@ -1838,7 +1840,10 @@ Game *createNewGame(char *level_name) {
     new_game->game_phase = PRE_WAVE_PHASE;
     new_game->level_name = DuplicateString(level_name);
     /* Load the level */
-    loadLevel(level_name, &new_game->waves, &new_game->nb_waves);
+    if (loadLevel(level_name, &new_game->waves, &new_game->nb_waves) == false) {
+    	destroyGame(new_game);
+    	return NULL;
+    }
     /* Load initial wave */
     if (new_game->nb_waves) loadNextWave(new_game);
     return new_game;
@@ -1860,13 +1865,18 @@ Game *createNewGameFromSave(char *level_name) {
     new_game->score = 0;
     new_game->turn_nb = 0;
     new_game->game_phase = PRE_WAVE_PHASE;
-    new_game->level_name = DuplicateString(level_name);
+    
     /* Load the level */
-    loadLevel(level_name, &new_game->waves, &new_game->nb_waves);
+
+    if (loadLevel(level_name, &new_game->waves, &new_game->nb_waves) == false) {
+    	destroyGame(new_game);
+    	return NULL;
+    }
+    new_game->level_name = DuplicateString(level_name);
     return new_game;
 }
 /* Load a game from a save file */
-Game *loadGameFromSave(char *save_file){
+Game *loadGameFromSave(const char *save_file){
     /* Openning text file */
     char *partial_path = concatString("../assets/saves/", save_file);
     char *full_path = concatString(partial_path, ".txt");
@@ -1888,7 +1898,13 @@ Game *loadGameFromSave(char *save_file){
                 break;
             /*header */
             case 4:
-            	new_game=createNewGameFromSave(values[0]);
+            	if ((new_game=createNewGameFromSave(values[0])) == NULL){
+            		destroyGame(new_game);
+            		free(full_path);
+    				fclose(file);
+            		return NULL;
+            	}
+            	
                 new_game->current_wave_nb = stringToInt(values[1]);
                 new_game->funds = stringToInt(values[2]);
                 new_game->score = stringToInt(values[3]);
@@ -1919,12 +1935,15 @@ Game *loadGameFromSave(char *save_file){
     return new_game;
 }
 Game* IsThereASave(const char *nickname){
-	Game *game = malloc(sizeof(Game));
-	if (game = loadGameFromSave(nickname)){
+	Game *game = createNewGame(nickname);
+	if (game == NULL){
+		game = loadGameFromSave(nickname);
+		if (game ==NULL){
+			game = createNewGame("level_test");
+		}
+		
 	}
-	else{
-		game = createNewGame("level_test");
-	}
+		
 	return game;
 }
 /* Load next wave, return true if successfull */
@@ -2013,6 +2032,16 @@ void updateGame(Game *game) {
     updateProjectiles(&game->projectile_list, &game->enemy_list, game->tower_list, &game->text_element_list, &game->score);
     updateEnemies(&game->currently_acting_enemy, &game->enemy_list, &game->tower_list, &game->text_element_list);
     updateTowers(&game->currently_acting_tower, &game->tower_list, game->enemy_list, &game->projectile_list);
+}
+
+void DrawLevelFinishedMenu(SDL_Renderer *rend,SDL_Surface **level_names){
+	drawFilledRect(rend, 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT, 128, 128, 128, 255);
+	drawImgStatic(rend,level_names[0],50,100,300,200,NULL);
+	drawImgStatic(rend,level_names[1],400,100,300,200,NULL);
+	drawImgStatic(rend,level_names[2],750,100,300,200,NULL);
+	drawImgStatic(rend,level_names[3],50,400,300,200,NULL);
+	drawImgStatic(rend,level_names[4],400,400,300,200,NULL);
+	drawImgStatic(rend,level_names[5],750,400,300,200,NULL);
 }
 
 /* Destroy a game structure and free its allocated memory */
@@ -2160,7 +2189,13 @@ bool saveGame(const char *save_name, Game *game){
     return true;
 }
 
-
+void SaveScore(char *nickname,int score){
+	char *partial_path = concatString("../assets/scores/", nickname);
+    char *full_path = concatString(partial_path, ".txt");
+    FILE *file = fopen(full_path, "a");
+    free(partial_path);
+    fprintf(file,"%s scored %d points", nickname,score);
+}
 
 /* Draw on screen enemies and towers, from top to bottom */
 void drawEnemiesAndTowers(SDL_Renderer *rend, Enemy *enemy_list, Tower *tower_list, int game_phase) {
@@ -2344,22 +2379,23 @@ int main(int argc, char* argv[]) {
     SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, ANTI_ALIASING);
 
     // [TEMPORARY]
-    TextElement *win_text_surface = addTextElement(NULL, "YOU DEFEATED THE SWARM !", 4.0, (SDL_Color) {255, 255, 255, 255}, (SDL_Color) {0, 0, 0, 255}, (SDL_Rect) {0, 0, WINDOW_WIDTH, WINDOW_HEIGHT}, true, false, NULL);
-	TextElement *save_text_surface = addTextElement(NULL, "SAVED SUCCESSFULY !", 4.0, (SDL_Color) {255, 255, 255, 255}, (SDL_Color) {0, 0, 0, 255}, (SDL_Rect) {0, 0, WINDOW_WIDTH, WINDOW_HEIGHT}, true, false, NULL);
+    //TextElement *win_text_surface = addTextElement(NULL, "YOU DEFEATED THE SWARM !", 4.0, (SDL_Color) {255, 255, 255, 255}, (SDL_Color) {0, 0, 0, 255}, (SDL_Rect) {0, 0, WINDOW_WIDTH, WINDOW_HEIGHT}, true, false, NULL);
+	//TextElement *save_text_surface = addTextElement(NULL, "SAVED SUCCESSFULY !", 4.0, (SDL_Color) {255, 255, 255, 255}, (SDL_Color) {0, 0, 0, 255}, (SDL_Rect) {0, 0, WINDOW_WIDTH, WINDOW_HEIGHT}, true, false, NULL);
     /* Load images */
     SDL_Surface *towers[] = {loadImg("towers/Archer_tower"), loadImg("towers/Empty_tower"), loadImg("towers/canon"), loadImg("towers/sorcerer")};
     SDL_Surface *towers_upgrades[] = {loadImg("towers/sorcerer_evolved"), loadImg("towers/canon_evolved"), loadImg("towers/barracks")};
     SDL_Surface *grass_tiles[] = {loadImg("others/grass_tile_a"), loadImg("others/grass_tile_b"), loadImg("others/grass_tile_c"), loadImg("others/grass_tile_d"), loadImg("others/grass_tile_alt_a"), loadImg("others/grass_tile_alt_b"), loadImg("others/grass_tile_alt_c"), loadImg("others/grass_tile_alt_d")};
-    SDL_Surface *highlighted_tile = loadImg("others/tile_choosed");SDL_Surface *delete_tower = loadImg("others/delete"); SDL_Surface *quit_menu = loadImg("others/quit");
+    SDL_Surface *highlighted_tile = loadImg("others/tile_choosed");SDL_Surface *delete_tower = loadImg("others/delete"); SDL_Surface *quit_menu = loadImg("others/quit");SDL_Surface *background = loadImg("others/backgroundblurry");
+    SDL_Surface *levels_names[]={loadImg("levels/easy"),loadImg("levels/medium"),loadImg("levels/hard"),loadImg("levels/infernal"),loadImg("levels/farm"),loadImg("levels/infinite")};
     char TowersNames[4][MAX_LENGTH_TOWER_NAME] = {"Archer Tower 50G", "Wall 25G", "Canon 100G", "Sorcerer tower 75G"};
 	char Nickname[MAX_LENGTH_NICKNAME];
     /* Load game */
-    printf("Enter Nickname : ");
+    printf("Enter Nickname or a level you want to try : ");
+
     scanf("%s",Nickname);
-    
+    printf("\n");
     //Game *game = loadGameFromSave(argv[1]);
     Game *game=IsThereASave(Nickname);
-
     /* Main loop */
     Tower *towerOnTile;
     int var; Enemy *enemy;
@@ -2372,7 +2408,14 @@ int main(int argc, char* argv[]) {
     bool running = true;
     while (running) {
     	//saving at each iteration
-    	saveGame(Nickname,game);
+    	if (strcmp(game->level_name,Nickname) == 0) {
+    		printf("You entered a level, Enter a Nickname to save your progression : ");
+    		scanf("%s", Nickname);
+    		printf("\n");
+    	}
+    	else{
+    		saveGame(Nickname,game);
+    	}
         while (SDL_PollEvent(&event)) {
             switch (event.type) {
                 /* Quit the game */
@@ -2461,60 +2504,94 @@ int main(int argc, char* argv[]) {
                         /* Tower placement */
                         case SDL_BUTTON_LEFT:
                             /* If tile selected */
-                            if (event.button.y > WINDOW_HEIGHT/4 || menu_hidden) {
-                                selected_tile_pos[0] = event.button.x;
-                                selected_tile_pos[1] = event.button.y;
-                                pixelToTile(&selected_tile_pos[0], &selected_tile_pos[1]);
-                                /* Check if tile is on map (last collumn cannot be build on) */
-                                if (1 <= selected_tile_pos[0] && selected_tile_pos[0] <= NB_COLLUMNS-1 && 1 <= selected_tile_pos[1] && selected_tile_pos[1] <= NB_ROWS) {
-                                    menu_hidden = false;
-                                }
-                                else {
-                                    selected_tile_pos[0] = 0; selected_tile_pos[1] = 0;
-                                    menu_hidden = true;
-                                }
-                            }
-                            /* Construction menu selected */
-                            /* Tile with tower selected */
-                            else if (getEnemyAndTowerAt(NULL, game->tower_list, selected_tile_pos[0], selected_tile_pos[1], NULL, &towerOnTile)){
-                                if (WINDOW_WIDTH-SPRITE_SIZE/2 <= event.button.x && event.button.x <= WINDOW_WIDTH && 0 <= event.button.y && event.button.y <= SPRITE_SIZE/2){
-                                    /* Clicked on the X to quit the menu */
-                                    menu_hidden = true;
-                                }
-                                else if (SPRITE_SIZE/2 <= event.button.x && event.button.x <= 2*SPRITE_SIZE/2 && 0 <= event.button.y && event.button.y <= SPRITE_SIZE/2){
-                                    sellTower(towerOnTile, &game->tower_list, &game->funds);
-                                    menu_hidden = true;
-                                }
-                                else if (0 <= event.button.x && event.button.x <= SPRITE_SIZE/2 && 0 <= event.button.y && event.button.y <= SPRITE_SIZE/2){
-                                    /* Clicked on the turret upgrade */
-                                    upgradeTower(&game->tower_list, game->enemy_list, towerOnTile->type, selected_tile_pos[0], selected_tile_pos[1], &game->funds);
-                                    menu_hidden=true;
-                                }
-                            }
-                            /* Tile with no tower selected */
-                            else {
-                                /* Archer tower */
-                                if (SPRITE_SIZE*0/2 + 50 <= event.button.x && event.button.x <= SPRITE_SIZE*1/2 + 50 && 0 <= event.button.y && event.button.y <= SPRITE_SIZE/2) {
-                                    if (buyTower(&game->tower_list, game->enemy_list, ARCHER_TOWER, selected_tile_pos[0], selected_tile_pos[1], &game->funds)) menu_hidden = true;
-                                }
-                                /* Wall tower */
-                                else if (SPRITE_SIZE*1/2 + 50 <= event.button.x && event.button.x <= SPRITE_SIZE*2/2 + 50 && 0 <= event.button.y && event.button.y <= SPRITE_SIZE/2) {
-                                    if (buyTower(&game->tower_list, game->enemy_list, WALL_TOWER, selected_tile_pos[0], selected_tile_pos[1], &game->funds)) menu_hidden = true;
-                                }
-                                /* Canon tower */
-                                else if (SPRITE_SIZE*2/2 +50 <= event.button.x && event.button.x <= SPRITE_SIZE*3/2 + 50 && 0 <= event.button.y && event.button.y <= SPRITE_SIZE/2) {
-                                    if (buyTower(&game->tower_list, game->enemy_list, CANON_TOWER, selected_tile_pos[0], selected_tile_pos[1], &game->funds)) menu_hidden = true;
-                                }
-                                /* Sorcerer tower */
-                                else if (SPRITE_SIZE*3/2 +50 <= event.button.x && event.button.x <= SPRITE_SIZE*4/2 + 50 && 0 <= event.button.y && event.button.y <= SPRITE_SIZE/2) {
-                                    if (buyTower(&game->tower_list, game->enemy_list, SORCERER_TOWER, selected_tile_pos[0], selected_tile_pos[1], &game->funds)) menu_hidden = true;
-                                }
-                                else if (WINDOW_WIDTH-SPRITE_SIZE/2 <= event.button.x && event.button.x <= WINDOW_WIDTH && 0 <= event.button.y && event.button.y <= SPRITE_SIZE/2){
-                                    /* Clicked on the X to quit the menu */
-                                    menu_hidden = true;
-                                }
-                                
-                            }
+                            if (game->game_phase == PRE_WAVE_PHASE){
+                            	// you can only build towers when the ennemies are not moving
+		                        if (event.button.y > WINDOW_HEIGHT/4 || menu_hidden) {
+		                            selected_tile_pos[0] = event.button.x;
+		                            selected_tile_pos[1] = event.button.y;
+		                            pixelToTile(&selected_tile_pos[0], &selected_tile_pos[1]);
+		                            /* Check if tile is on map (last collumn cannot be build on) */
+		                            if (1 <= selected_tile_pos[0] && selected_tile_pos[0] <= NB_COLLUMNS-1 && 1 <= selected_tile_pos[1] && selected_tile_pos[1] <= NB_ROWS) {
+		                                menu_hidden = false;
+		                            }
+		                            else {
+		                                selected_tile_pos[0] = 0; selected_tile_pos[1] = 0;
+		                                menu_hidden = true;
+		                            }
+		                        }
+		                        /* Construction menu selected */
+		                        /* Tile with tower selected */
+		                        else if (getEnemyAndTowerAt(NULL, game->tower_list, selected_tile_pos[0], selected_tile_pos[1], NULL, &towerOnTile)){
+		                            if (WINDOW_WIDTH-SPRITE_SIZE/2 <= event.button.x && event.button.x <= WINDOW_WIDTH && 0 <= event.button.y && event.button.y <= SPRITE_SIZE/2){
+		                                /* Clicked on the X to quit the menu */
+		                                menu_hidden = true;
+		                            }
+		                            else if (SPRITE_SIZE/2 <= event.button.x && event.button.x <= 2*SPRITE_SIZE/2 && 0 <= event.button.y && event.button.y <= SPRITE_SIZE/2){
+		                                sellTower(towerOnTile, &game->tower_list, &game->funds);
+		                                menu_hidden = true;
+		                            }
+		                            else if (0 <= event.button.x && event.button.x <= SPRITE_SIZE/2 && 0 <= event.button.y && event.button.y <= SPRITE_SIZE/2){
+		                                /* Clicked on the turret upgrade */
+		                                upgradeTower(&game->tower_list, game->enemy_list, towerOnTile->type, selected_tile_pos[0], selected_tile_pos[1], &game->funds);
+		                                menu_hidden=true;
+		                            }
+		                        }
+		                        /* Tile with no tower selected */
+		                        else {
+		                            /* Archer tower */
+		                            if (SPRITE_SIZE*0/2 + 50 <= event.button.x && event.button.x <= SPRITE_SIZE*1/2 + 50 && 0 <= event.button.y && event.button.y <= SPRITE_SIZE/2) {
+		                                if (buyTower(&game->tower_list, game->enemy_list, ARCHER_TOWER, selected_tile_pos[0], selected_tile_pos[1], &game->funds)) menu_hidden = true;
+		                            }
+		                            /* Wall tower */
+		                            else if (SPRITE_SIZE*1/2 + 50 <= event.button.x && event.button.x <= SPRITE_SIZE*2/2 + 50 && 0 <= event.button.y && event.button.y <= SPRITE_SIZE/2) {
+		                                if (buyTower(&game->tower_list, game->enemy_list, WALL_TOWER, selected_tile_pos[0], selected_tile_pos[1], &game->funds)) menu_hidden = true;
+		                            }
+		                            /* Canon tower */
+		                            else if (SPRITE_SIZE*2/2 +50 <= event.button.x && event.button.x <= SPRITE_SIZE*3/2 + 50 && 0 <= event.button.y && event.button.y <= SPRITE_SIZE/2) {
+		                                if (buyTower(&game->tower_list, game->enemy_list, CANON_TOWER, selected_tile_pos[0], selected_tile_pos[1], &game->funds)) menu_hidden = true;
+		                            }
+		                            /* Sorcerer tower */
+		                            else if (SPRITE_SIZE*3/2 +50 <= event.button.x && event.button.x <= SPRITE_SIZE*4/2 + 50 && 0 <= event.button.y && event.button.y <= SPRITE_SIZE/2) {
+		                                if (buyTower(&game->tower_list, game->enemy_list, SORCERER_TOWER, selected_tile_pos[0], selected_tile_pos[1], &game->funds)) menu_hidden = true;
+		                            }
+		                            else if (WINDOW_WIDTH-SPRITE_SIZE/2 <= event.button.x && event.button.x <= WINDOW_WIDTH && 0 <= event.button.y && event.button.y <= SPRITE_SIZE/2){
+		                                /* Clicked on the X to quit the menu */
+		                                menu_hidden = true;
+		                            }
+		                            
+		                        }
+		                    }
+		                    else if (game->game_phase == END_OF_LEVEL_PHASE){
+		                    	DrawLevelFinishedMenu(rend,levels_names);
+		                    	if ( 50 <= event.button.x && event.button.x <= 350 &&  100<=event.button.y && event.button.y<=300){
+		                    		
+		                    	}
+		                    	else if ( 400 <= event.button.x && event.button.x <= 700 &&  100 <=event.button.y && event.button.y<=300){
+		                    	
+		                    	}
+		                    	else if ( 750 <= event.button.x && event.button.x <= 1050 &&  100<=event.button.y && event.button.y<=300){
+		                    	
+		                    	}
+		                    	else if ( 50 <= event.button.x && event.button.x <= 350 &&  400<=event.button.y && event.button.y<=600){
+		                    	
+		                    	}
+		                    	else if ( 400 <= event.button.x && event.button.x <= 700 &&  400<=event.button.y && event.button.y<=600){
+		                    	
+		                    	}
+		                    	else if ( 750 <= event.button.x && event.button.x <= 1050 &&  400<=event.button.y && event.button.y<=600){
+		                    	
+		                    	}
+		                    	
+		                    }
+		                    else{
+		                    	if (menu_hidden == false){
+		                            if (WINDOW_WIDTH-SPRITE_SIZE/2 <= event.button.x && event.button.x <= WINDOW_WIDTH && 0 <= event.button.y && event.button.y <= SPRITE_SIZE/2){
+		                                /* Clicked on the X to quit the menu */
+		                                menu_hidden = true;
+		                            }
+		                    	}
+		                    }
+                            
                             break;
                         default:
                             break;
@@ -2561,7 +2638,7 @@ int main(int argc, char* argv[]) {
         CAM_POS_Y += BASE_CAM_SPEED * cam_y_speed * power(CAM_SPEED_MULT, cam_speed_mult) * power(1.4142/2, cam_x_speed && cam_y_speed) / CAM_SCALE;
 
         /* Draw elements */
-        // drawImgStatic(rend,background,0,0,WINDOW_WIDTH,WINDOW_HEIGHT,NULL);
+        drawImgStatic(rend,background,0,0,WINDOW_WIDTH,WINDOW_HEIGHT,NULL);
         /* Draw grass tiles */
         for (int y = 0; y < NB_ROWS; y++) for (int x = 0; x < NB_COLLUMNS; x++) {
             drawImgDynamic(rend, grass_tiles[x%2 + (y%2) * 2], TILE_WIDTH * x, TILE_HEIGHT * y, SPRITE_SIZE, SPRITE_SIZE, NULL);
@@ -2587,14 +2664,11 @@ int main(int argc, char* argv[]) {
             drawImgDynamic(rend, highlighted_tile, (selected_tile_pos[0]-1)*TILE_WIDTH, (selected_tile_pos[1]-1)*TILE_HEIGHT, SPRITE_SIZE, SPRITE_SIZE, NULL);
             drawFilledRect(rend, 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT/4 + 10, 128, 128, 128, 255);
             drawRect(rend, 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT/4 + 10, 255, 255, 255, 255);
-
             if (!getEnemyAndTowerAt(NULL, game->tower_list, selected_tile_pos[0], selected_tile_pos[1], NULL, &towerOnTile)) {
                 for (unsigned long long i = 0; i < sizeof(towers)/sizeof(towers[0]); i++) {
                     drawImgStatic(rend, towers[i], i*SPRITE_SIZE/2+50, 0, SPRITE_SIZE/2, SPRITE_SIZE/2, NULL);
-                    
                 }
             }
-
             else{
                 switch (towerOnTile->type){
                     case SORCERER_TOWER:
@@ -2613,7 +2687,7 @@ int main(int argc, char* argv[]) {
             }
             drawImgStatic(rend,quit_menu,WINDOW_WIDTH-SPRITE_SIZE/2,0,SPRITE_SIZE/2,SPRITE_SIZE/2,NULL);
         }
-
+        
         /* Draw to window and loop */
         SDL_RenderPresent(rend);
         SDL_Delay(max(1000/FPS - (SDL_GetTicks64()-CURRENT_TICK), 0));
@@ -2622,9 +2696,11 @@ int main(int argc, char* argv[]) {
 
     /* Free allocated memory */
     delImg(delete_tower); delImg(quit_menu);
+    for (int i = 6; i > 0; i--) delImg(levels_names[i-1]);
     for (int i = 4; i > 0; i--) delImg(towers[i-1]);
     for (int i = 8; i > 0; i--) delImg(grass_tiles[i-1]);
     for (int i = 3; i > 0; i--) delImg(towers_upgrades[i-1]);
+
     free(selected_tile_pos);
     destroyGame(game);
     /* Release resources */
