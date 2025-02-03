@@ -17,8 +17,6 @@
 #define FONT_WIDTH 32      // Width of the custom font in px
 #define FONT_HEIGHT 48     // Height of the custom font in px
 
-#define MAX_LENGTH_TOWER_NAME 20
-
 /* Enemy types */
 #define SLIME_ENEMY 'S'
 #define GELLY_ENEMY 'G'
@@ -139,6 +137,7 @@
 #define char_left_bracket '('
 #define char_right_bracket ')'
 #define char_heart '&'
+#define char_coin '*'
 
 
 
@@ -273,7 +272,7 @@ void setAnimDamageNumber(Animation *anim);
 bool applyAnim(Animation *anim, SDL_Rect *rect);
 TextElement *addTextElement(TextElement **text_element_list, char *text, double scale, SDL_Color main_color, SDL_Color outline_color, SDL_Rect rect, bool centered, bool dynamic_pos, Animation *anim);
 void destroyTextElement(TextElement *text_element, TextElement **text_element_list);
-void drawTextElement(SDL_Renderer *rend, TextElement **text_element_list);
+void drawTextElements(SDL_Renderer *rend, TextElement **text_element_list);
 TextElement *addDamageNumber(TextElement **text_element_list, int amount, int collumn, int row);
 bool getEnemyAndTowerAt(Enemy *enemy_list, Tower *tower_list, int collumn, int row, Enemy **enemy, Tower **tower);
 bool isTileEmpty(Enemy *enemy_list, Tower *tower_list, int collumn, int row);
@@ -307,7 +306,7 @@ bool loadNextWave(Game *game);
 void startNextWave(Game *game);
 void beguinNewSurvivalWave(Game *game);
 Wave *newWave(int income, Enemy *enemy_list);
-void *destroyWaveList(Wave **wave_list, int nb_wave);
+void destroyWaveList(Wave **wave_list, int nb_wave);
 bool isWhitespace(char c);
 bool readValue(char **line, char **value);
 bool readLine(FILE *file, char ***values, int *nb_values);
@@ -685,6 +684,9 @@ SDL_Surface *textSurface(char *text, SDL_Color main_color, SDL_Color outline_col
                 case char_heart:
                     character = loadImg("font/char_heart");
                     break;
+                case char_coin:
+                    character = loadImg("font/char_coin");
+                    break;
                 default:
                     character = NULL;
                     break;
@@ -893,7 +895,7 @@ void destroyTextElement(TextElement *text_element, TextElement **text_element_li
 }
 
 /* Draw all text elements, if a text element animation is set to idle, automaticaly destroy it */
-void drawTextElement(SDL_Renderer *rend, TextElement **text_element_list) {
+void drawTextElements(SDL_Renderer *rend, TextElement **text_element_list) {
     TextElement *current = *text_element_list, *tmp;
     int x, y, w, h;
     while (current) {
@@ -1856,7 +1858,7 @@ Game *createNewGame(char *level_name) {
         /* Survival mode pre-wave, no enemies, only income */
         new_game->waves = malloc(sizeof(Wave *));
         new_game->waves[0] = newWave(2025, NULL);
-        new_game->nb_waves = 1;
+        new_game->current_wave_nb = new_game->nb_waves = -1;
     }
     else {
         /* Load waves based on level file */
@@ -1873,13 +1875,14 @@ Game *loadGameFromSave(char *save_file);
 
 /* Load next wave, return true if successfull */
 bool loadNextWave(Game *game) {
-    if (game->current_wave_nb >= game->nb_waves) return false;
+    if (game->current_wave_nb >= game->nb_waves && game->nb_waves >= 0) return false;
+    int wave_nb = max(game->current_wave_nb, 0);
     game->current_wave_nb++;
     /* Destroy any remaining enemy and load new wave */
     while (game->enemy_list) destroyEnemy(game->enemy_list, &game->enemy_list);
-    game->enemy_list = game->waves[game->current_wave_nb-1]->enemy_list;
+    game->enemy_list = game->waves[wave_nb]->enemy_list;
     /* Give wave income */
-    game->funds += game->waves[game->current_wave_nb-1]->income;
+    game->funds += game->waves[wave_nb]->income;
     /* Reset game phase */
     game->game_phase = PRE_WAVE_PHASE;
     return true;
@@ -2044,6 +2047,7 @@ void beguinNewSurvivalWave(Game *game) {
     game->current_wave_nb = 0;
     game->nb_waves = 1;
     loadNextWave(game);
+    game->nb_waves = -1;
     game->current_wave_nb = wave_nb + 1;
     startNextWave(game);
 }
@@ -2060,7 +2064,7 @@ Wave *newWave(int income, Enemy *enemy_list) {
 }
 
 /* Initialize new wave object */
-void *destroyWaveList(Wave **wave_list, int nb_wave) {
+void destroyWaveList(Wave **wave_list, int nb_wave) {
     if (!wave_list) return;
     for (int i = nb_wave; i > 0; i--) free(wave_list[i-1]);
     free(wave_list);
@@ -2225,10 +2229,10 @@ bool loadSave(const char *save, Enemy **enemy_list, Tower **tower_list, char *le
                 break;
             /* add tower and enemy */
             case 5:
-                if (strcmp(values[0],"E")==0){
+                if (!strcmp(values[0], "E")) {
                     addEnemy(enemy_list, stringToInt(values[1]), stringToInt(values[2]), stringToInt(values[3]), stringToInt(values[4]));
                 }
-                else if (strcmp(values[0],"T")==0){
+                else if (!strcmp(values[0],"T")){
                     addTower(tower_list, *enemy_list, stringToInt(values[1]), stringToInt(values[2]), stringToInt(values[3]), stringToInt(values[4]));
                 }
                 break;
@@ -2276,7 +2280,7 @@ void drawEnemiesAndTowers(SDL_Renderer *rend, Enemy *enemy_list, Tower *tower_li
                         applyAnim(enemy->anim, &enemy->life_bar->rect);
                         enemy->life_bar->rect.w = w; enemy->life_bar->rect.h = h;
                     }
-                    drawTextElement(rend, &enemy->life_bar);
+                    drawTextElements(rend, &enemy->life_bar);
                 }
             }
             enemy = enemy->next_on_row;
@@ -2298,7 +2302,7 @@ void drawEnemiesAndTowers(SDL_Renderer *rend, Enemy *enemy_list, Tower *tower_li
                         applyAnim(tower->anim, &tower->life_bar->rect);
                         tower->life_bar->rect.w = w; tower->life_bar->rect.h = h;
                     }
-                    drawTextElement(rend, &tower->life_bar);
+                    drawTextElements(rend, &tower->life_bar);
                 }
             }
             tower = tower->next;
@@ -2360,7 +2364,7 @@ SDL_Surface *loadImg(const char *path) {
 
 /* Delete an image (surface) */
 void delImg(SDL_Surface *img) {
-    SDL_FreeSurface(img);
+    if (img) SDL_FreeSurface(img);
 }
 
 /* Draw an image on the window surface */
@@ -2411,6 +2415,7 @@ void drawRectDynamic(SDL_Renderer *rend, int pos_x, int pos_y, int width, int he
 int main(int argc, char* argv[]) {
     /* Initialize a new random seed */
     srand(time(NULL));
+
     /* Initialize SDL */
     if (SDL_Init(SDL_INIT_EVERYTHING) != 0) {
         printf("Error initializing SDL: %s\n", SDL_GetError());
@@ -2443,8 +2448,16 @@ int main(int argc, char* argv[]) {
     SDL_Surface *towers[] = {loadImg("towers/Archer_tower"), loadImg("towers/Empty_tower"), loadImg("towers/canon"), loadImg("towers/sorcerer")};
     SDL_Surface *towers_upgrades[] = {loadImg("towers/sorcerer_evolved"), loadImg("towers/canon_evolved"), loadImg("towers/barracks")};
     SDL_Surface *grass_tiles[] = {loadImg("others/grass_tile_a"), loadImg("others/grass_tile_b"), loadImg("others/grass_tile_c"), loadImg("others/grass_tile_d"), loadImg("others/grass_tile_alt_a"), loadImg("others/grass_tile_alt_b"), loadImg("others/grass_tile_alt_c"), loadImg("others/grass_tile_alt_d")};
-    SDL_Surface *highlighted_tile = loadImg("others/tile_choosed");SDL_Surface *delete_tower = loadImg("others/delete"); SDL_Surface *quit_menu = loadImg("others/quit");
-    char TowersNames[4][MAX_LENGTH_TOWER_NAME] = {"Archer Tower 50G", "Wall 25G", "Canon 100G", "Sorcerer tower 75G"};
+    SDL_Surface *highlighted_tile = loadImg("others/tile_choosed"); SDL_Surface *delete_tower = loadImg("others/delete"); SDL_Surface *quit_menu = loadImg("others/quit");
+
+    /* Load UI text */
+    TextElement *ui_text_element = NULL;
+    /* (1 : top left) Funds */
+    addTextElement(&ui_text_element, "", 0.5, (SDL_Color) {0, 0, 0, 0}, (SDL_Color) {0, 0, 0, 0}, (SDL_Rect) {0, 0, WINDOW_WIDTH/3, 48}, true, false, NULL);
+    /* (2 : top middle) Wave number */
+    addTextElement(&ui_text_element, "", 0.5, (SDL_Color) {0, 0, 0, 0}, (SDL_Color) {0, 0, 0, 0}, (SDL_Rect) {WINDOW_WIDTH/3, 0, WINDOW_WIDTH/3, 48}, true, false, NULL);
+    /* (3 : top right) Score */
+    addTextElement(&ui_text_element, "", 0.5, (SDL_Color) {0, 0, 0, 0}, (SDL_Color) {0, 0, 0, 0}, (SDL_Rect) {WINDOW_WIDTH*2/3, 0, WINDOW_WIDTH/3, 48}, true, false, NULL);
 
     /* Load game */
     Game *game = createNewGame(SURVIVAL_MODE);
@@ -2452,6 +2465,7 @@ int main(int argc, char* argv[]) {
     /* Main loop */
     Tower *towerOnTile;
     int var; Enemy *enemy;
+    int score = -1, wave_nb = -1, nb_waves = -1, funds = -1; char text_value[256];
     int cam_x_speed = 0, cam_y_speed = 0, cam_speed_mult = 0;
     int *selected_tile_pos = malloc(2 * sizeof(int)); selected_tile_pos[0] = 0; selected_tile_pos[1] = 0;
     bool menu_hidden = true;
@@ -2642,6 +2656,30 @@ int main(int argc, char* argv[]) {
         /* Update game */
         updateGame(game);
 
+        /* Update UI if needed */
+        /* Update score display */
+        if (score != game->score) {
+            score = game->score;
+            delImg(ui_text_element->sprite);
+            sprintf(text_value, "Score: %d points", game->score);
+            ui_text_element->sprite = textSurface(text_value, (SDL_Color) {255, 255, 255, 255}, (SDL_Color) {127, 127, 127, 255});
+        }
+        /* Update wave display */
+        if (wave_nb != game->current_wave_nb || nb_waves != game->nb_waves) {
+            wave_nb = game->current_wave_nb; nb_waves = game->nb_waves;
+            delImg(ui_text_element->next->sprite);
+            if (game->nb_waves >= 0) sprintf(text_value, "Wave: %d/%d", game->current_wave_nb, game->nb_waves);
+            else sprintf(text_value, "Wave: %d", game->current_wave_nb);
+            ui_text_element->next->sprite = textSurface(text_value, (SDL_Color) {255, 127, 0, 255}, (SDL_Color) {127, 63, 0, 255});
+        }
+        /* Update funds display */
+        if (funds != game->funds) {
+            funds = game->funds;
+            delImg(ui_text_element->next->next->sprite);
+            sprintf(text_value, "Funds: %d*", game->funds);
+            ui_text_element->next->next->sprite = textSurface(text_value, (SDL_Color) {255, 255, 127, 255}, (SDL_Color) {127, 127, 63, 255});
+        }
+
         /* Clear screen */
         SDL_SetRenderDrawColor(rend, 0, 0, 0, 255);
         SDL_RenderClear(rend);
@@ -2653,9 +2691,8 @@ int main(int argc, char* argv[]) {
         /* Draw elements */
         // drawImgStatic(rend,background,0,0,WINDOW_WIDTH,WINDOW_HEIGHT,NULL);
         /* Draw grass tiles */
-        for (int y = 0; y < NB_ROWS; y++) for (int x = 0; x < NB_COLLUMNS; x++) {
+        for (int y = 0; y < NB_ROWS; y++) for (int x = 0; x < NB_COLLUMNS; x++) 
             drawImgDynamic(rend, grass_tiles[x%2 + (y%2) * 2], TILE_WIDTH * x, TILE_HEIGHT * y, SPRITE_SIZE, SPRITE_SIZE, NULL);
-        }
         /* Draw additional grass tiles for enemy preview, only in pre-wave game phase */
         if (game->game_phase == PRE_WAVE_PHASE) {
             var = 0; enemy = game->enemy_list;
@@ -2663,28 +2700,24 @@ int main(int argc, char* argv[]) {
                 var = max(var, enemy->collumn - NB_COLLUMNS);
                 enemy = enemy->next;
             }
-            for (int y = 0; y < NB_ROWS; y++) for (int x = NB_COLLUMNS; x < NB_COLLUMNS + var; x++) {
+            for (int y = 0; y < NB_ROWS; y++) for (int x = NB_COLLUMNS; x < NB_COLLUMNS + var; x++)
                 drawImgDynamic(rend, grass_tiles[4 + x%2 + (y%2) * 2], TILE_WIDTH * x, TILE_HEIGHT * y, SPRITE_SIZE, SPRITE_SIZE, NULL);
-            }
         }
+        /* Draw selection cursor */
+        if (!menu_hidden) drawImgDynamic(rend, highlighted_tile, (selected_tile_pos[0]-1)*TILE_WIDTH, (selected_tile_pos[1]-1)*TILE_HEIGHT, SPRITE_SIZE, SPRITE_SIZE, NULL);
         /* Draw entities */
         drawEnemiesAndTowers(rend, game->enemy_list, game->tower_list, game->game_phase);
         drawProjectiles(rend, game->projectile_list);
         /* Draw damage numbers */
-        drawTextElement(rend, &game->text_element_list);
+        drawTextElements(rend, &game->text_element_list);
+
         /* Draw the Menu if necessary */
         if (!menu_hidden) {
-            drawImgDynamic(rend, highlighted_tile, (selected_tile_pos[0]-1)*TILE_WIDTH, (selected_tile_pos[1]-1)*TILE_HEIGHT, SPRITE_SIZE, SPRITE_SIZE, NULL);
             drawFilledRect(rend, 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT/4 + 10, 128, 128, 128, 255);
             drawRect(rend, 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT/4 + 10, 255, 255, 255, 255);
-
-            if (!getEnemyAndTowerAt(NULL, game->tower_list, selected_tile_pos[0], selected_tile_pos[1], NULL, &towerOnTile)) {
-                for (unsigned long long i = 0; i < sizeof(towers)/sizeof(towers[0]); i++) {
+            if (!getEnemyAndTowerAt(NULL, game->tower_list, selected_tile_pos[0], selected_tile_pos[1], NULL, &towerOnTile))
+                for (unsigned long long i = 0; i < sizeof(towers)/sizeof(towers[0]); i++)
                     drawImgStatic(rend, towers[i], i*SPRITE_SIZE/2+50, 0, SPRITE_SIZE/2, SPRITE_SIZE/2, NULL);
-                    
-                }
-            }
-
             else{
                 switch (towerOnTile->type){
                     case SORCERER_TOWER:
@@ -2704,6 +2737,10 @@ int main(int argc, char* argv[]) {
             drawImgStatic(rend,quit_menu,WINDOW_WIDTH-SPRITE_SIZE/2,0,SPRITE_SIZE/2,SPRITE_SIZE/2,NULL);
         }
 
+        /* Draw text UI (lower display if menu is openned) */
+        ui_text_element->rect.y = ui_text_element->next->rect.y = ui_text_element->next->next->rect.y = !menu_hidden * WINDOW_HEIGHT/4;
+        drawTextElements(rend, &ui_text_element);
+
         /* Draw to window and loop */
         SDL_RenderPresent(rend);
         SDL_Delay(max(1000/FPS - (SDL_GetTicks64()-CURRENT_TICK), 0));
@@ -2716,6 +2753,7 @@ int main(int argc, char* argv[]) {
     for (int i = 8; i > 0; i--) delImg(grass_tiles[i-1]);
     for (int i = 3; i > 0; i--) delImg(towers_upgrades[i-1]);
     free(selected_tile_pos);
+    while (ui_text_element) destroyTextElement(ui_text_element, &ui_text_element);
     destroyGame(game);
     /* Release resources */
     SDL_DestroyRenderer(rend);
