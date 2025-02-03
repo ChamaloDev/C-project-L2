@@ -18,7 +18,7 @@
 #define FONT_HEIGHT 48     // Height of the custom font in px
 
 #define MAX_LENGTH_TOWER_NAME 20
-
+#define MAX_LENGTH_NICKNAME 20
 /* Enemy types */
 #define SLIME_ENEMY 'S'
 #define GELLY_ENEMY 'G'
@@ -317,9 +317,9 @@ void drawFilledRect(SDL_Renderer *rend, int pos_x, int pos_y, int width, int hei
 
 Tower *upgradeTower(Tower **tower_list, Enemy *enemy_list, char tower_type, int placement_collumn, int placement_row, int *funds);
 bool saveGame(const char *save_name, Game *game);
-bool loadSave(const char *save, Enemy **enemy_list, Tower **tower_list, char *level_name, int *funds, int *actual_wave, int *score);
-
-
+char *DuplicateString(const char *a);
+Game *createNewGameFromSave(char *level_name);
+Game *IsThereASave(const char *nickname);
 
 /* Return an integer between a and b (included) */
 int randrange(int a, int b) {
@@ -390,7 +390,11 @@ double periodicFunction(Uint64 x) {
     if (x >= 250) return 1.0 - periodicFunctionSub(positive_mod(x, 250) / 1000.0);
     return periodicFunctionSub(0.25 - positive_mod(x, 250) / 1000.0);
 }
-
+char *DuplicateString(const char *a) {
+    char *b = malloc(strlen(a) + 1);
+    if (b) strcpy(b, a);
+    return b;
+}
 
 
 /* Create a new text surface */
@@ -1032,12 +1036,13 @@ Enemy *addEnemy(Enemy **enemy_list, char enemy_type, int spawn_collumn, int spaw
             return NULL;
     }
     /* Initialize life bar */
-    updateLifeBarTextElement(&new_enemy->life_bar, new_enemy->life_points, new_enemy->max_life_points);
+    
     /* If health is manualy set */
     if (!enemy_list) return new_enemy;
     if (life_points != -1){
         new_enemy->life_points = life_points;
     }
+    updateLifeBarTextElement(&new_enemy->life_bar, new_enemy->life_points, new_enemy->max_life_points);
     /* Add the new enemy to the enemy list */
     /* If empty then no search is needed */
     if (!(*enemy_list)) {
@@ -1401,13 +1406,13 @@ Tower *addTower(Tower **tower_list, Enemy *enemy_list, char tower_type, int plac
             return NULL;
     }
     /* Initialize life bar */
-    updateLifeBarTextElement(&new_tower->life_bar, new_tower->life_points, new_tower->max_life_points);
+    
 
     /* If health is manually set */
     if (life_points !=-1){
         new_tower->life_points = life_points;
     }
-
+	updateLifeBarTextElement(&new_tower->life_bar, new_tower->life_points, new_tower->max_life_points);
     if (!tower_list) return new_tower;
     /* Add the tower to the list of towers */
     if (!(*tower_list)) {
@@ -1831,7 +1836,7 @@ Game *createNewGame(char *level_name) {
     new_game->score = 0;
     new_game->turn_nb = 0;
     new_game->game_phase = PRE_WAVE_PHASE;
-    new_game->level_name = level_name;
+    new_game->level_name = DuplicateString(level_name);
     /* Load the level */
     loadLevel(level_name, &new_game->waves, &new_game->nb_waves);
     /* Load initial wave */
@@ -1839,10 +1844,89 @@ Game *createNewGame(char *level_name) {
     return new_game;
 }
 
+Game *createNewGameFromSave(char *level_name) {
+    /* Initialize the new game object ,same as the previous one but the first wave dont need to be initialized*/
+    Game *new_game = malloc(sizeof(Game));
+    new_game->waves = NULL;
+    new_game->nb_waves = 0;
+    new_game->current_wave_nb = 0;
+    new_game->tower_list = NULL;
+    new_game->currently_acting_tower = NULL;
+    new_game->enemy_list = NULL;
+    new_game->currently_acting_enemy = NULL;
+    new_game->projectile_list = NULL;
+    new_game->text_element_list = NULL;
+    new_game->funds = 0;
+    new_game->score = 0;
+    new_game->turn_nb = 0;
+    new_game->game_phase = PRE_WAVE_PHASE;
+    new_game->level_name = DuplicateString(level_name);
+    /* Load the level */
+    loadLevel(level_name, &new_game->waves, &new_game->nb_waves);
+    return new_game;
+}
 /* Load a game from a save file */
-// TODO!
-Game *loadGameFromSave(char *save_file);
-
+Game *loadGameFromSave(char *save_file){
+    /* Openning text file */
+    char *partial_path = concatString("../assets/saves/", save_file);
+    char *full_path = concatString(partial_path, ".txt");
+    FILE *file = fopen(full_path, "r");
+    free(partial_path);
+    /* Checking if file was open successfully */
+    if (!file) {
+        printf("Save file at \"%s\" not found, new player, creating new save \n", full_path);
+        free(full_path);
+        return false;
+    }
+    Game *new_game = malloc(sizeof(Game));
+    /* Retrieve all informations from the file */
+    char **values; int nb_values;
+    while (readLine(file, &values, &nb_values)) {
+        switch (nb_values) {
+            /* Empty line, ignore it */
+            case 0:
+                break;
+            /*header */
+            case 4:
+            	new_game=createNewGameFromSave(values[0]);
+                new_game->current_wave_nb = stringToInt(values[1]);
+                new_game->funds = stringToInt(values[2]);
+                new_game->score = stringToInt(values[3]);
+                break;
+            /* add tower and enemy */
+            case 5:
+                if (values[0][0] == 'E'){
+                    addEnemy(&new_game->enemy_list, values[1][0],stringToInt(values[3]), stringToInt(values[2]),stringToInt(values[4]));
+                }
+                else if (values[0][0]=='T'){
+                    addTower(&new_game->tower_list,new_game->enemy_list, values[1][0], stringToInt(values[3]),stringToInt(values[2]),stringToInt(values[4]));
+                }
+                break;
+            /* Invalid value count on line */
+            default:
+                printf("[ERROR]    Invalid syntax for level file \"%s\"\n", full_path);
+                free(full_path);
+                for (int i = 0; i < nb_values; i++) free(values[i]);
+                free(values);
+                fclose(file);
+                return NULL;
+        }
+        for (int i = 0; i < nb_values; i++) free(values[i]);
+        free(values);
+    }
+    free(full_path);
+    fclose(file);
+    return new_game;
+}
+Game* IsThereASave(const char *nickname){
+	Game *game = malloc(sizeof(Game));
+	if (game = loadGameFromSave(nickname)){
+	}
+	else{
+		game = createNewGame("level_test");
+	}
+	return game;
+}
 /* Load next wave, return true if successfull */
 bool loadNextWave(Game *game) {
     if (game->current_wave_nb >= game->nb_waves) return false;
@@ -2076,60 +2160,6 @@ bool saveGame(const char *save_name, Game *game){
     return true;
 }
 
-bool loadSave(const char *save, Enemy **enemy_list, Tower **tower_list, char *level_name, int *funds, int *actual_wave, int *score) {
-    /* Openning text file */
-    char *partial_path = concatString("../assets/saves/", save);
-    char *full_path = concatString(partial_path, ".txt");
-    FILE *file = fopen(full_path, "r");
-    free(partial_path);
-    /* Checking if file was open successfully */
-    if (!file) {
-        printf("[ERROR]    Level file at \"%s\" not found\n", full_path);
-        free(full_path);
-        return false;
-    }
-
-    /* Retrieve all informations from the file */
-    char **values; int nb_values;
-    while (readLine(file, &values, &nb_values)) {
-        switch (nb_values) {
-            /* Empty line, ignore it */
-            case 0:
-                break;
-            /*header */
-            case 4:
-                level_name = malloc(strlen(values[0]) + 1);
-                   strcpy(level_name, values[0]);
-                   *actual_wave = stringToInt(values[1]);
-                   *funds = stringToInt(values[2]);
-                   *score = stringToInt(values[3]);
-                break;
-            /* add tower and enemy */
-            case 5:
-                if (strcmp(values[0],"E")==0){
-                    addEnemy(enemy_list, stringToInt(values[1]), stringToInt(values[2]), stringToInt(values[3]), stringToInt(values[4]));
-                }
-                else if (strcmp(values[0],"T")==0){
-                    addTower(tower_list, *enemy_list, stringToInt(values[1]), stringToInt(values[2]), stringToInt(values[3]), stringToInt(values[4]));
-                }
-                break;
-            /* Invalid value count on line */
-            default:
-                printf("[ERROR]    Invalid syntax for level file \"%s\"\n", full_path);
-                free(full_path);
-                for (int i = 0; i < nb_values; i++) free(values[i]);
-                free(values);
-                fclose(file);
-                return false;
-        }
-        for (int i = 0; i < nb_values; i++) free(values[i]);
-        free(values);
-    }
-    free(full_path);
-    fclose(file);
-    return true;
-}
-
 
 
 /* Draw on screen enemies and towers, from top to bottom */
@@ -2315,16 +2345,20 @@ int main(int argc, char* argv[]) {
 
     // [TEMPORARY]
     TextElement *win_text_surface = addTextElement(NULL, "YOU DEFEATED THE SWARM !", 4.0, (SDL_Color) {255, 255, 255, 255}, (SDL_Color) {0, 0, 0, 255}, (SDL_Rect) {0, 0, WINDOW_WIDTH, WINDOW_HEIGHT}, true, false, NULL);
-
+	TextElement *save_text_surface = addTextElement(NULL, "SAVED SUCCESSFULY !", 4.0, (SDL_Color) {255, 255, 255, 255}, (SDL_Color) {0, 0, 0, 255}, (SDL_Rect) {0, 0, WINDOW_WIDTH, WINDOW_HEIGHT}, true, false, NULL);
     /* Load images */
     SDL_Surface *towers[] = {loadImg("towers/Archer_tower"), loadImg("towers/Empty_tower"), loadImg("towers/canon"), loadImg("towers/sorcerer")};
     SDL_Surface *towers_upgrades[] = {loadImg("towers/sorcerer_evolved"), loadImg("towers/canon_evolved"), loadImg("towers/barracks")};
     SDL_Surface *grass_tiles[] = {loadImg("others/grass_tile_a"), loadImg("others/grass_tile_b"), loadImg("others/grass_tile_c"), loadImg("others/grass_tile_d"), loadImg("others/grass_tile_alt_a"), loadImg("others/grass_tile_alt_b"), loadImg("others/grass_tile_alt_c"), loadImg("others/grass_tile_alt_d")};
     SDL_Surface *highlighted_tile = loadImg("others/tile_choosed");SDL_Surface *delete_tower = loadImg("others/delete"); SDL_Surface *quit_menu = loadImg("others/quit");
     char TowersNames[4][MAX_LENGTH_TOWER_NAME] = {"Archer Tower 50G", "Wall 25G", "Canon 100G", "Sorcerer tower 75G"};
-
+	char Nickname[MAX_LENGTH_NICKNAME];
     /* Load game */
-    Game *game = createNewGame("level_test");
+    printf("Enter Nickname : ");
+    scanf("%s",Nickname);
+    
+    //Game *game = loadGameFromSave(argv[1]);
+    Game *game=IsThereASave(Nickname);
 
     /* Main loop */
     Tower *towerOnTile;
@@ -2337,6 +2371,8 @@ int main(int argc, char* argv[]) {
     SDL_Event event;
     bool running = true;
     while (running) {
+    	//saving at each iteration
+    	saveGame(Nickname,game);
         while (SDL_PollEvent(&event)) {
             switch (event.type) {
                 /* Quit the game */
@@ -2374,9 +2410,6 @@ int main(int argc, char* argv[]) {
                             break;
                         case SDL_SCANCODE_D:
                             cam_x_speed = +1;
-                            break;
-                        case SDL_SCANCODE_X:
-                            saveGame("save1", game);
                             break;
                         case SDL_SCANCODE_LSHIFT:
                             cam_speed_mult = +1;
