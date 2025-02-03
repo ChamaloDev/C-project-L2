@@ -39,7 +39,7 @@
 /* Animation type */
 #define IDLE_ANIMATION 'I'
 #define HURT_ANIMATION 'H'
-#define DEAD_ANIMATION 'D'
+#define SPAWN_ANIMATION 'S'
 #define ATTACK_ANIMATION 'A'
 #define MOVE_ANIMATION 'M'
 #define PROJECTILE_ANIMATION 'P'
@@ -254,7 +254,7 @@ void destroyAnim(Animation *anim);
 void setAnim(Animation *anim, char type, Uint64 length, int *data);
 void setAnimIdle(Animation *anim);
 void setAnimHurt(Animation *anim);
-void setAnimDead(Animation *anim);
+void setAnimSpawn(Animation *anim);
 void setAnimAttack(Animation *anim, int side);
 void setAnimMove(Animation *anim, int dx, int dy);
 void setAnimProjectile(Animation *anim, int x1, int y1, int x2, int y2, double speed);
@@ -296,7 +296,7 @@ bool readLine(FILE *file, char ***values, int *nb_values);
 bool loadLevel(const char *path, Wave ***waves, int *nb_waves);
 SDL_Surface *loadImg(const char *path);
 void delImg(SDL_Surface *img);
-void drawEnemiesAndTowers(SDL_Renderer *rend, Enemy *enemy_list, Tower *tower_list);
+void drawEnemiesAndTowers(SDL_Renderer *rend, Enemy *enemy_list, Tower *tower_list, int game_phase);
 void dynamicToStatic(SDL_Rect *rect);
 void staticToDynamic(SDL_Rect *rect);
 void tileToPixel(int *x, int *y);
@@ -727,9 +727,9 @@ void setAnimHurt(Animation *anim) {
     setAnim(anim, HURT_ANIMATION, 500, NULL);
 }
 
-/* Set animation to dead (TODO!) */
-void setAnimDead(Animation *anim) {
-    setAnim(anim, DEAD_ANIMATION, 1000, NULL);
+/* Set animation to spawn */
+void setAnimSpawn(Animation *anim) {
+    setAnim(anim, SPAWN_ANIMATION, 1000, NULL);
 }
 
 /* Set animation to attack */
@@ -784,6 +784,14 @@ bool applyAnim(Animation *anim, SDL_Rect *rect) {
             var_a = (CURRENT_TICK - anim->start_tick) / (double) anim->length;
             var_b = periodicFunction(var_a*1000.0) / 2.5;
             rect->x += rect->w * var_b * anim->data[0];
+            break;
+        /* Spawn animation (appear on the tile while slightly droping from above) */
+        case SPAWN_ANIMATION:
+            var_a = (CURRENT_TICK - anim->start_tick) / (double) anim->length;
+            rect->x += SPRITE_SIZE * (1 - var_a) / 2;
+            rect->y += SPRITE_SIZE * (1 - var_a) / 2 - TILE_HEIGHT * (1 - var_a) * 5;
+            rect->w *= var_a;
+            rect->h *= var_a;
             break;
         /* Movement animation (go to destination by doing small jumps) */
         case MOVE_ANIMATION:
@@ -1193,7 +1201,12 @@ void makeAllEnemiesMove(Enemy *enemy_list, Tower *tower_list) {
         while (enemy) {
             if (enemy->collumn > NB_COLLUMNS) enemy->speed = 1;
             delta = moveEnemy(enemy, enemy_list, tower_list, -enemy->speed, 'x');
-            if (delta) setAnimMove(enemy->anim, delta, 0);
+            if (delta) {
+                /* If the enemy just spawned in, play a special animation */
+                if (enemy->collumn == NB_COLLUMNS) setAnimSpawn(enemy->anim);
+                /* Default movement animation */
+                else if (enemy->collumn < NB_COLLUMNS) setAnimMove(enemy->anim, delta, 0);
+            }
             enemy->speed = enemy->base_speed;
             enemy = enemy->next_on_row;
         }
@@ -1340,7 +1353,7 @@ Tower *addTower(Tower **tower_list, Enemy *enemy_list, char tower_type, int plac
             new_tower->sprite = loadImg("towers/barracks");
             break;
         case SOLIDER_TOWER:
-            new_tower->max_life_points = new_tower->life_points = 3;
+            new_tower->max_life_points = new_tower->life_points = 4;
             new_tower->cost = 0;
             new_tower->base_attack_cooldown = 1;
             new_tower->sprite = loadImg("towers/Spearman");
@@ -1413,6 +1426,8 @@ Tower *buyTower(Tower **tower_list, Enemy *enemy_list, char tower_type, int plac
         return NULL;
     }
     *funds -= new_tower->cost;
+    /* Play a spawning animation */
+    setAnimSpawn(new_tower->anim);
     return new_tower;
 }
 
@@ -1748,7 +1763,7 @@ void updateProjectiles(Projectile **projectile_list, Enemy **enemy_list, Tower *
                     damageEnemy(projectile->target, 10, enemy_list, tower_list, text_element_list, score);
                     /* Area damage */
                     for (int dy = -1; dy <= 1; dy++) for (int dx = -1; dx <= 1; dx++) if (dx || dy)
-                        if (getEnemyAndTowerAt(*enemy_list, NULL, projectile->target->collumn + dx, projectile->target->row + dy, &enemy, NULL))
+                        if (doesTileExist(projectile->target->collumn + dx, projectile->target->row + dy) && getEnemyAndTowerAt(*enemy_list, NULL, projectile->target->collumn + dx, projectile->target->row + dy, &enemy, NULL))
                             damageEnemy(enemy, 4, enemy_list, tower_list, text_element_list, score);
                     break;
                 case SORCERER_TOWER:
@@ -1969,7 +1984,7 @@ bool loadSave(const char *save, Enemy **enemy_list, Tower **tower_list, char *le
 
 
 /* Draw on screen enemies and towers, from top to bottom */
-void drawEnemiesAndTowers(SDL_Renderer *rend, Enemy *enemy_list, Tower *tower_list) {
+void drawEnemiesAndTowers(SDL_Renderer *rend, Enemy *enemy_list, Tower *tower_list, int game_phase) {
     Enemy **first_of_each_row = getFirstEnemyOfAllRows(enemy_list);
     Enemy *enemy; Tower *tower;
     SDL_Rect dest;
@@ -1979,16 +1994,21 @@ void drawEnemiesAndTowers(SDL_Renderer *rend, Enemy *enemy_list, Tower *tower_li
         /* Draw enemies on the current row */
         enemy = first_of_each_row[row_nb-1];
         while (enemy) {
-            dest.x = (enemy->collumn - 1) * TILE_WIDTH; dest.y = (enemy->row - 1) * TILE_HEIGHT; dest.w = SPRITE_SIZE; dest.h = SPRITE_SIZE;
-            drawImgDynamic(rend, enemy->sprite, dest.x, dest.y, dest.w, dest.h, enemy->anim);
-            /* Life bar */
-            if (enemy->life_bar) {
-                w = enemy->life_bar->rect.w; h = enemy->life_bar->rect.h;
-                enemy->life_bar->rect.x = dest.x;
-                enemy->life_bar->rect.y = dest.y + SPRITE_SIZE - enemy->life_bar->sprite->h;
-                if (enemy->anim && enemy->anim->type != IDLE_ANIMATION) applyAnim(enemy->anim, &enemy->life_bar->rect);
-                drawTextElement(rend, &enemy->life_bar);
-                enemy->life_bar->rect.w = w; enemy->life_bar->rect.h = h;
+            if (enemy->collumn <= NB_COLLUMNS || game_phase == PRE_WAVE_PHASE) {
+                dest.x = (enemy->collumn - 1) * TILE_WIDTH; dest.y = (enemy->row - 1) * TILE_HEIGHT; dest.w = SPRITE_SIZE; dest.h = SPRITE_SIZE;
+                drawImgDynamic(rend, enemy->sprite, dest.x, dest.y, dest.w, dest.h, enemy->anim);
+                /* Life bar */
+                if (enemy->life_bar && (!enemy->anim || enemy->anim->type != SPAWN_ANIMATION) && game_phase != PRE_WAVE_PHASE) {
+                    enemy->life_bar->rect.x = dest.x;
+                    enemy->life_bar->rect.y = dest.y + SPRITE_SIZE - enemy->life_bar->sprite->h;
+                    /* Apply enemy anim to lifebar (except for size change) to match it's current visual position */
+                    if (enemy->anim && enemy->anim->type != IDLE_ANIMATION) {
+                        w = enemy->life_bar->rect.w; h = enemy->life_bar->rect.h;
+                        applyAnim(enemy->anim, &enemy->life_bar->rect);
+                        enemy->life_bar->rect.w = w; enemy->life_bar->rect.h = h;
+                    }
+                    drawTextElement(rend, &enemy->life_bar);
+                }
             }
             enemy = enemy->next_on_row;
         }
@@ -2000,13 +2020,16 @@ void drawEnemiesAndTowers(SDL_Renderer *rend, Enemy *enemy_list, Tower *tower_li
                 drawImgDynamic(rend, tower->sprite, dest.x, dest.y, dest.w, dest.h, tower->anim);
                 drawImgDynamic(rend, tower->sprite, dest.x, dest.y, SPRITE_SIZE, SPRITE_SIZE, tower->anim);
                 /* Life bar */
-                if (tower->life_bar) {
-                    w = tower->life_bar->rect.w; h = tower->life_bar->rect.h;
+                if (tower->life_bar && (!tower->anim || tower->anim->type != SPAWN_ANIMATION)) {
                     tower->life_bar->rect.x = dest.x;
                     tower->life_bar->rect.y = dest.y + SPRITE_SIZE - tower->life_bar->sprite->h;
-                    if (tower->anim && tower->anim->type != IDLE_ANIMATION) applyAnim(tower->anim, &tower->life_bar->rect);
+                    /* Apply tower anim to lifebar (except for size change) to match it's current visual position */
+                    if (tower->anim && tower->anim->type != IDLE_ANIMATION) {
+                        w = tower->life_bar->rect.w; h = tower->life_bar->rect.h;
+                        applyAnim(tower->anim, &tower->life_bar->rect);
+                        tower->life_bar->rect.w = w; tower->life_bar->rect.h = h;
+                    }
                     drawTextElement(rend, &tower->life_bar);
-                    tower->life_bar->rect.w = w; tower->life_bar->rect.h = h;
                 }
             }
             tower = tower->next;
@@ -2157,7 +2180,7 @@ int main(int argc, char* argv[]) {
     /* Load images */
     SDL_Surface *towers[] = {loadImg("towers/Archer_tower"), loadImg("towers/Empty_tower"), loadImg("towers/canon"), loadImg("towers/sorcerer")};
     SDL_Surface *towers_upgrades[] = {loadImg("towers/sorcerer_evolved"), loadImg("towers/canon_evolved"), loadImg("towers/barracks")};
-    SDL_Surface *grass_tiles[] = {loadImg("others/grass_tile_a"), loadImg("others/grass_tile_b"), loadImg("others/grass_tile_c"), loadImg("others/grass_tile_d")};
+    SDL_Surface *grass_tiles[] = {loadImg("others/grass_tile_a"), loadImg("others/grass_tile_b"), loadImg("others/grass_tile_c"), loadImg("others/grass_tile_d"), loadImg("others/grass_tile_alt_a"), loadImg("others/grass_tile_alt_b"), loadImg("others/grass_tile_alt_c"), loadImg("others/grass_tile_alt_d")};
     SDL_Surface *highlighted_tile = loadImg("others/tile_choosed");SDL_Surface *delete_tower = loadImg("others/delete"); SDL_Surface *quit_menu = loadImg("others/quit");
     char TowersNames[4][MAX_LENGTH_TOWER_NAME] = {"Archer Tower 50G", "Wall 25G", "Canon 100G", "Sorcerer tower 75G"};
 
@@ -2165,6 +2188,7 @@ int main(int argc, char* argv[]) {
     Tower *towerOnTile;
     Enemy *enemy; Tower *tower; bool condition;
     int nb_turns=0,funds=0,score=0;
+    int var;
     funds+=waves[0]->income;
     TextElement *text_element_list = NULL;
     int game_phase = PRE_WAVE_PHASE;
@@ -2442,10 +2466,21 @@ int main(int argc, char* argv[]) {
         // drawImgStatic(rend,background,0,0,WINDOW_WIDTH,WINDOW_HEIGHT,NULL);
         /* Draw grass tiles */
         for (int y = 0; y < NB_ROWS; y++) for (int x = 0; x < NB_COLLUMNS; x++) {
-                drawImgDynamic(rend, grass_tiles[x%2 + (y%2) * 2], TILE_WIDTH * x, TILE_HEIGHT * y, SPRITE_SIZE, SPRITE_SIZE, NULL);
+            drawImgDynamic(rend, grass_tiles[x%2 + (y%2) * 2], TILE_WIDTH * x, TILE_HEIGHT * y, SPRITE_SIZE, SPRITE_SIZE, NULL);
+        }
+        /* Draw additional grass tiles for enemy preview, only in pre-wave game phase */
+        if (game_phase == PRE_WAVE_PHASE) {
+            var = 0; enemy = enemy_list;
+            while (enemy) {
+                var = max(var, enemy->collumn - NB_COLLUMNS);
+                enemy = enemy->next;
+            }
+            for (int y = 0; y < NB_ROWS; y++) for (int x = NB_COLLUMNS; x < NB_COLLUMNS + var; x++) {
+                drawImgDynamic(rend, grass_tiles[4 + x%2 + (y%2) * 2], TILE_WIDTH * x, TILE_HEIGHT * y, SPRITE_SIZE, SPRITE_SIZE, NULL);
+            }
         }
         /* Draw entities */
-        drawEnemiesAndTowers(rend, enemy_list, tower_list);
+        drawEnemiesAndTowers(rend, enemy_list, tower_list, game_phase);
         drawProjectiles(rend, projectile_list);
         /* Draw damage numbers */
         drawTextElement(rend, &text_element_list);
@@ -2489,9 +2524,9 @@ int main(int argc, char* argv[]) {
     
     /* Free allocated memory */
     delImg(delete_tower); delImg(quit_menu);
-    delImg(towers[3]); delImg(towers[2]); delImg(towers[1]); delImg(towers[0]);
-    delImg(grass_tiles[3]); delImg(grass_tiles[2]); delImg(grass_tiles[1]); delImg(grass_tiles[0]);
-    delImg(towers_upgrades[0]); delImg(towers_upgrades[1]); delImg(towers_upgrades[2]);
+    for (int i = 4; i > 0; i--) delImg(towers[i-1]);
+    for (int i = 8; i > 0; i--) delImg(grass_tiles[i-1]);
+    for (int i = 3; i > 0; i--) delImg(towers_upgrades[i-1]);
     free(selected_tile_pos);
     freeEverything(&enemy_list,&tower_list);
     /* Release resources */
