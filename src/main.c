@@ -35,7 +35,6 @@
 #define DESTROYER_TOWER 'D'
 #define SORCERER_TOWER 'S'
 #define MAGE_TOWER 'M'
-
 /* Animation type */
 #define IDLE_ANIMATION 'I'
 #define HURT_ANIMATION 'H'
@@ -197,8 +196,6 @@ typedef struct enemy {
     int collumn;                // Collumn number of the enemy, 0 being the leftmost collumn
     int base_speed;             // Base number of collumn travelled per turn
     int speed;                  // Number of collumn travelled per turn, reseted to base_speed after moving
-    int base_ability_cooldown;  // Cooldown between the use of this enemy special ability
-    int ability_cooldown;       // Current cooldown of this enemy special ability, 0 meaning ready to use
     struct enemy* next;         // Next enemy (in order of apparition)
     struct enemy* next_on_row;  // Next enemy on the same row (behind this)
     struct enemy* prev_on_row;  // Previous enemy on the same row (in front of this)
@@ -269,7 +266,7 @@ void setAnimProjectile(Animation *anim, int x1, int y1, int x2, int y2, double s
 void setAnimDamageNumber(Animation *anim);
 bool applyAnim(Animation *anim, SDL_Rect *rect);
 TextElement *addTextElement(TextElement **text_element_list, char *text, double scale, SDL_Color main_color, SDL_Color outline_color, SDL_Rect rect, bool centered, bool dynamic_pos, Animation *anim);
-void destroyTextElement(TextElement **text_element_list, TextElement *text_element);
+void destroyTextElement(TextElement *text_element, TextElement **text_element_list);
 void drawTextElement(SDL_Renderer *rend, TextElement **text_element_list);
 TextElement *addDamageNumber(TextElement **text_element_list, int amount, int collumn, int row);
 bool getEnemyAndTowerAt(Enemy *enemy_list, Tower *tower_list, int collumn, int row, Enemy **enemy, Tower **tower);
@@ -859,7 +856,7 @@ TextElement *addTextElement(TextElement **text_element_list, char *text, double 
 }
 
 /* Destroy a text element */
-void destroyTextElement(TextElement **text_element_list, TextElement *text_element) {
+void destroyTextElement(TextElement *text_element, TextElement **text_element_list) {
     if (!text_element) return;
     /* Modify pointers */
     if (text_element_list) {
@@ -884,7 +881,7 @@ void drawTextElement(SDL_Renderer *rend, TextElement **text_element_list) {
         /* Automaticaly destroy text element that are currently in idle animation (or if doesn't have a sprite) */
         if (!current->sprite || (current->anim && ((current->anim->length != (Uint64) -1 && CURRENT_TICK - current->anim->start_tick >= current->anim->length) || current->anim->type == IDLE_ANIMATION))) {
             tmp = current->next;
-            destroyTextElement(text_element_list, current);
+            destroyTextElement(current, text_element_list);
             current = tmp;
             continue;
         }
@@ -925,7 +922,7 @@ TextElement *addDamageNumber(TextElement **text_element_list, int amount, int co
 TextElement *updateLifeBarTextElement(TextElement **text_element, int current_life_points, int max_life_points) {
     if (!text_element || current_life_points > max_life_points || max_life_points <= 0) return NULL;
     /* Free previous text element representing the life bar */
-    if (*text_element) destroyTextElement(NULL, *text_element);
+    if (*text_element) destroyTextElement(*text_element, NULL);
     /* Text value for the new text element */
     char text_value[1000];
     sprintf(text_value, "%d/%d&", current_life_points, max_life_points);
@@ -996,19 +993,19 @@ Enemy *addEnemy(Enemy **enemy_list, char enemy_type, int spawn_collumn, int spaw
             new_enemy->max_life_points = new_enemy->life_points = 5;
             new_enemy->base_speed = new_enemy->speed = 2;
             new_enemy->sprite = loadImg("enemies/Slime");
-            new_enemy->score_on_kill = 50;
+            new_enemy->score_on_kill = 25;
             break;
         case GELLY_ENEMY:
             new_enemy->max_life_points = new_enemy->life_points = 6;
             new_enemy->base_speed = new_enemy->speed = 2;
             new_enemy->sprite = loadImg("enemies/Gelly");
-            new_enemy->score_on_kill = 100;
+            new_enemy->score_on_kill = 50;
             break;
         case GOBLIN_ENEMY:
             new_enemy->max_life_points = new_enemy->life_points = 10;
             new_enemy->base_speed = new_enemy->speed = 3;
             new_enemy->sprite = loadImg("enemies/Goblin");
-            new_enemy->score_on_kill = 70;
+            new_enemy->score_on_kill = 75;
             break;
         case ORC_ENEMY:
             new_enemy->max_life_points = new_enemy->life_points = 20;
@@ -1020,13 +1017,13 @@ Enemy *addEnemy(Enemy **enemy_list, char enemy_type, int spawn_collumn, int spaw
             new_enemy->max_life_points = new_enemy->life_points = 13;
             new_enemy->base_speed = new_enemy->speed = 1;
             new_enemy->sprite = loadImg("enemies/necromancer");
-            new_enemy->score_on_kill = 175;
+            new_enemy->score_on_kill = 200;
             break;
         case SKELETON_ENEMY:
-            new_enemy->max_life_points = new_enemy->life_points = 3;
-            new_enemy->base_speed = new_enemy->speed = 2;
+            new_enemy->max_life_points = new_enemy->life_points = 4;
+            new_enemy->base_speed = new_enemy->speed = 3;
             new_enemy->sprite = loadImg("enemies/skeleton");
-            new_enemy->score_on_kill = 20;
+            new_enemy->score_on_kill = 25;
             break;
         default:  /* Unknown enemy type */
             printf("[ERROR]    Unknown enemy type '%c'\n", enemy_type);
@@ -1096,7 +1093,7 @@ void destroyEnemy(Enemy *enemy, Enemy **enemy_list) {
     /* Destroy enemy data */
     if (enemy->sprite) delImg(enemy->sprite);
     if (enemy->anim) destroyAnim(enemy->anim);
-    if (enemy->life_bar) destroyTextElement(NULL, enemy->life_bar);
+    if (enemy->life_bar) destroyTextElement(enemy->life_bar, NULL);
     free(enemy);
 }
 
@@ -1248,10 +1245,10 @@ void enemyAttack(Enemy *enemy, Tower **tower_list, Enemy **enemy_list, TextEleme
             if (tower) result = damageTower(tower, 5, tower_list, text_element_list);
             break;
         case NECROMANCER_ENEMY:
-            if (tower) result = damageTower(tower, 2, tower_list,text_element_list);
+            if (tower) result = damageTower(tower, 4, tower_list,text_element_list);
             break;
         case SKELETON_ENEMY:
-            if (tower) result = damageTower(tower, 1, tower_list,text_element_list);
+            if (tower) result = damageTower(tower, 2, tower_list,text_element_list);
             break;
         default:  /* Unknown enemy type */
             printf("[ERROR]    Unknown enemy type '%c'\n", enemy->type);
@@ -1297,13 +1294,13 @@ bool damageEnemy(Enemy *enemy, int amount, Enemy **enemy_list, Tower *tower_list
         /* Gelly splits into 2 slimes on death, one above and one bellow + one at current position or behind if a slime spawn position is blocked */
         if (n == GELLY_ENEMY) {
             n = 2;
-            if (n-- && isTileEmpty(*enemy_list, tower_list, x, y - 1) && doesTileExist(x, y - 1) && (e = addEnemy(enemy_list, SLIME_ENEMY, x, y - 1,-1))) setAnimMove(e->anim, 0, -1);
+            if (n-- && isTileEmpty(*enemy_list, tower_list, x, y - 1) && doesTileExist(x, y - 1) && (e = addEnemy(enemy_list, SLIME_ENEMY, x, y - 1, -1))) setAnimMove(e->anim, 0, -1);
             else n++;
-            if (n-- && isTileEmpty(*enemy_list, tower_list, x, y + 1) && doesTileExist(x, y + 1) && (e = addEnemy(enemy_list, SLIME_ENEMY, x, y + 1,-1))) setAnimMove(e->anim, 0, +1);
+            if (n-- && isTileEmpty(*enemy_list, tower_list, x, y + 1) && doesTileExist(x, y + 1) && (e = addEnemy(enemy_list, SLIME_ENEMY, x, y + 1, -1))) setAnimMove(e->anim, 0, +1);
             else n++;
-            if (n-- && isTileEmpty(*enemy_list, tower_list, x + 1, y) && doesTileExist(x + 1, y) && (e = addEnemy(enemy_list, SLIME_ENEMY, x + 1, y,-1))) setAnimMove(e->anim, +1, 0);
+            if (n-- && isTileEmpty(*enemy_list, tower_list, x + 1, y) && doesTileExist(x + 1, y) && (e = addEnemy(enemy_list, SLIME_ENEMY, x + 1, y, -1))) setAnimMove(e->anim, +1, 0);
             else n++;
-            if (n-- && isTileEmpty(*enemy_list, tower_list, x, y) && doesTileExist(x, y) && addEnemy(enemy_list, SLIME_ENEMY, x, y,-1));
+            if (n-- && isTileEmpty(*enemy_list, tower_list, x, y) && doesTileExist(x, y) && addEnemy(enemy_list, SLIME_ENEMY, x, y, -1));
             else n++;
         }
         return true;
@@ -1321,6 +1318,14 @@ bool damageEnemy(Enemy *enemy, int amount, Enemy **enemy_list, Tower *tower_list
             if (!n) n = moveEnemy(enemy, *enemy_list, tower_list, 1, 'y');
         }
         if (n && enemy->anim) setAnimMove(enemy->anim, 0, n);
+    }
+    /* Necromancer summons a skeleton nearby on hit */
+    else if (enemy->type == NECROMANCER_ENEMY) {
+        x = enemy->collumn; y = enemy->row;
+        if (isTileEmpty(*enemy_list, tower_list, x - 1, y) && doesTileExist(x - 1, y) && (e = addEnemy(enemy_list, SKELETON_ENEMY, x - 1, y, -1))) setAnimSpawn(e->anim);
+        else if (isTileEmpty(*enemy_list, tower_list, x, y - 1) && doesTileExist(x, y - 1) && (e = addEnemy(enemy_list, SKELETON_ENEMY, x, y - 1, -1))) setAnimSpawn(e->anim);
+        else if (isTileEmpty(*enemy_list, tower_list, x, y + 1) && doesTileExist(x, y + 1) && (e = addEnemy(enemy_list, SKELETON_ENEMY, x, y + 1, -1))) setAnimSpawn(e->anim);
+        else if (isTileEmpty(*enemy_list, tower_list, x + 1, y) && doesTileExist(x + 1, y) && (e = addEnemy(enemy_list, SKELETON_ENEMY, x + 1, y, -1))) setAnimSpawn(e->anim);
     }
     return true;
 }
@@ -1500,7 +1505,7 @@ void destroyTower(Tower *tower, Tower **tower_list) {
     /* Destroy tower data */
     if (tower->sprite) delImg(tower->sprite);
     if (tower->anim) destroyAnim(tower->anim);
-    if (tower->life_bar) destroyTextElement(NULL, tower->life_bar);
+    if (tower->life_bar) destroyTextElement(tower->life_bar, NULL);
     free(tower);
 }
 
