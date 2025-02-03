@@ -41,3 +41,6 @@ dkms.conf
 
 # Visual Studio Code
 *.vscode
+
+# Game save files
+assets/saves/*.txt
