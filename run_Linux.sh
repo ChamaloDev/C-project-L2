@@ -7,7 +7,7 @@ EXEC="game"
 mkdir -p bin
 
 # Compiling code
-gcc -std=c17 src/*.c -Wall -Wextra -o bin/$EXEC $(sdl2-config --cflags --libs) -lSDL2_ttf
+gcc -std=c17 src/*.c -Wall -Wextra -o bin/$EXEC $(sdl2-config --cflags --libs)
 
 # Change to the bin directory
 cd bin

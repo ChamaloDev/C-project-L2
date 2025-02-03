@@ -2,8 +2,8 @@
 
 rem Set variables
 set CC=gcc
-set CFLAGS=-Iinclude\SDL2 -Iinclude\SDL2_ttf
-set LDFLAGS=-Llib\SDL2 -Llib\SDL2_ttf -lmingw32 -lSDL2main -lSDL2_ttf -lSDL2
+set CFLAGS=-Iinclude\SDL2
+set LDFLAGS=-Llib\SDL2 -Llib\SDL2_ttf -lmingw32 -lSDL2main -lSDL2
 
 set SRC=src\*.c
 set OBJ=main.o
