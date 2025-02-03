@@ -1856,13 +1856,14 @@ Game *createNewGame(char *level_name) {
         /* Survival mode pre-wave, no enemies, only income */
         new_game->waves = malloc(sizeof(Wave *));
         new_game->waves[0] = newWave(2025, NULL);
+        new_game->nb_waves = 1;
     }
     else {
         /* Load waves based on level file */
         loadLevel(level_name, &new_game->waves, &new_game->nb_waves);
-        /* Load initial wave */
-        if (new_game->nb_waves) loadNextWave(new_game);
     }
+    /* Load initial wave */
+    if (new_game->nb_waves) loadNextWave(new_game);
     return new_game;
 }
 
@@ -1991,40 +1992,41 @@ void beguinNewSurvivalWave(Game *game) {
 
     /* Build the new survival wave */
     /* Wave power determine how strong are the wave enemies and how numerous they are */
-    int wave_power = 500 + game->score;
+    int wave_power = 1000 + power(game->current_wave_nb, 2) * 250;
     /* Initialize new wave object */
     Wave *new_wave = newWave(0, NULL);
     /* Add enemies to the wave */
-    char enemy_type; int collumn, row;
+    char enemy_type; int collumn, row; int nb_enemy = 0;
     while (wave_power > 0) {
+        nb_enemy++;
         /* Chose enemy type */
         /* Add a necromancer enemy */
-        if (roll(1.0 - 8000.0/(8000.0 + wave_power))) {
+        if (roll(1.0 - 20000.0/(20000.0 + wave_power))) {
             enemy_type = NECROMANCER_ENEMY;
-            wave_power -= 1000;
+            wave_power -= 400;
         }
         /* Add an orc enemy */
-        else if (roll(1.0 - 5000.0/(5000.0 + wave_power))) {
+        else if (roll(1.0 - 10000.0/(10000.0 + wave_power))) {
             enemy_type = ORC_ENEMY;
-            wave_power -= 600;
+            wave_power -= 300;
         }
         /* Add a goblin enemy */
-        else if (roll(1.0 - 2000.0/(2000.0 + wave_power))) {
+        else if (roll(1.0 - 2500.0/(2500.0 + wave_power))) {
             enemy_type = GOBLIN_ENEMY;
-            wave_power -= 200;
+            wave_power -= 150;
         }
         /* Add a gelly enemy */
         else if (roll(1.0 - 1000.0/(1000.0 + wave_power))) {
             enemy_type = GELLY_ENEMY;
-            wave_power -= 150;
+            wave_power -= 100;
         }
         /* Add a slime enemy */
         else {
             enemy_type = SLIME_ENEMY;
-            wave_power -= 100;
+            wave_power -= 50;
         }
         /* Chose enemy position */
-        collumn = randrange(0, 5) + NB_COLLUMNS + 1;
+        collumn = randrange(0, nb_enemy/2) + NB_COLLUMNS + 1;
         row = randrange(0, NB_ROWS) + 1;
         /* Check if tile is free for the enemy to spawn, otherwise try another position further right */
         while (!isTileEmpty(new_wave->enemy_list, NULL, collumn, row)) {
