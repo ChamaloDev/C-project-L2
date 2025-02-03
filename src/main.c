@@ -306,6 +306,8 @@ Game *loadGameFromSave(char *save_file);
 bool loadNextWave(Game *game);
 void startNextWave(Game *game);
 void beguinNewSurvivalWave(Game *game);
+Wave *newWave(int income, Enemy *enemy_list);
+void *destroyWaveList(Wave **wave_list, int nb_wave);
 bool isWhitespace(char c);
 bool readValue(char **line, char **value);
 bool readLine(FILE *file, char ***values, int *nb_values);
@@ -1849,17 +1851,18 @@ Game *createNewGame(char *level_name) {
     new_game->turn_nb = 0;
     new_game->game_phase = PRE_WAVE_PHASE;
     new_game->level_name = level_name;
-    /* Load the level */
+    /* Load the waves */
     if (!strcmp(level_name, SURVIVAL_MODE)) {
-        /* SUrvival mode pre-wave, no enemies, only income */
-        Wave *pre_wave = malloc(sizeof(Wave));
-        pre_wave->income = 2025;
-        pre_wave->enemy_list = NULL;
-        new_game->waves = &pre_wave;
+        /* Survival mode pre-wave, no enemies, only income */
+        new_game->waves = malloc(sizeof(Wave *));
+        new_game->waves[0] = newWave(2025, NULL);
     }
-    else loadLevel(level_name, &new_game->waves, &new_game->nb_waves);
-    /* Load initial wave */
-    if (new_game->nb_waves) loadNextWave(new_game);
+    else {
+        /* Load waves based on level file */
+        loadLevel(level_name, &new_game->waves, &new_game->nb_waves);
+        /* Load initial wave */
+        if (new_game->nb_waves) loadNextWave(new_game);
+    }
     return new_game;
 }
 
@@ -1973,7 +1976,9 @@ void destroyGame(Game *game) {
     /* Destroy all text elements (damage numbers) */
     while (game->text_element_list) destroyTextElement(game->text_element_list, &game->text_element_list);
     /* Destroy all waves */
-    for (int i = game->nb_waves; i > 0; i--) free(game->waves[i-1]);
+    destroyWaveList(game->waves, game->nb_waves);
+    /* Destroy game object */
+    free(game);
 }
 
 /* Launch a new random wave of enemy for survival mode */
@@ -1982,15 +1987,13 @@ void beguinNewSurvivalWave(Game *game) {
 
     /* Delete the old wave */
     while (game->enemy_list) destroyEnemy(game->enemy_list, &game->enemy_list);
-    for (int i = game->nb_waves; i > 0; i--) free(game->waves[i-1]);
+    destroyWaveList(game->waves, game->nb_waves);
 
     /* Build the new survival wave */
     /* Wave power determine how strong are the wave enemies and how numerous they are */
     int wave_power = 500 + game->score;
     /* Initialize new wave object */
-    Wave *new_wave = malloc(sizeof(Wave));
-    new_wave->income = 0;
-    new_wave->enemy_list = NULL;
+    Wave *new_wave = newWave(0, NULL);
     /* Add enemies to the wave */
     char enemy_type; int collumn, row;
     while (wave_power > 0) {
@@ -2034,12 +2037,31 @@ void beguinNewSurvivalWave(Game *game) {
 
     /* Launch the new survival wave */
     int wave_nb = game->current_wave_nb;
-    game->waves = &new_wave;
+    game->waves = malloc(sizeof(Wave *));
+    game->waves[0] = new_wave;
     game->current_wave_nb = 0;
     game->nb_waves = 1;
     loadNextWave(game);
     game->current_wave_nb = wave_nb + 1;
     startNextWave(game);
+}
+
+
+
+
+/* Initialize new wave object */
+Wave *newWave(int income, Enemy *enemy_list) {
+    Wave *new_wave = malloc(sizeof(Wave));
+    new_wave->income = income;
+    new_wave->enemy_list = enemy_list;
+    return new_wave;
+}
+
+/* Initialize new wave object */
+void *destroyWaveList(Wave **wave_list, int nb_wave) {
+    if (!wave_list) return;
+    for (int i = nb_wave; i > 0; i--) free(wave_list[i-1]);
+    free(wave_list);
 }
 
 
@@ -2078,7 +2100,7 @@ bool readLine(FILE *file, char ***values, int *nb_values) {
         return false;
     }
     /* Split it into all of its individual values */
-    *values = malloc(0); *nb_values = 0; char *value, *line = line_buffer;
+    *values = malloc(sizeof(char *)); *nb_values = 0; char *value, *line = line_buffer;
     while (readValue(&line, &value)) {
         (*nb_values)++;
         *values = realloc(*values, (*nb_values) * sizeof(char *));
@@ -2103,7 +2125,7 @@ bool loadLevel(const char *path, Wave ***waves, int *nb_waves) {
     }
 
     /* Retrieve all informations from the file */
-    *waves = malloc(0); *nb_waves = 0; char **values; int nb_values;
+    *waves = malloc(sizeof(Wave *)); *nb_waves = 0; char **values; int nb_values;
     while (readLine(file, &values, &nb_values)) {
         switch (nb_values) {
             /* Empty line, ignore it */
@@ -2113,9 +2135,7 @@ bool loadLevel(const char *path, Wave ***waves, int *nb_waves) {
             case 1:
                 (*nb_waves)++;
                 *waves = realloc(*waves, (*nb_waves) * sizeof(Wave *));
-                (*waves)[*nb_waves - 1] = malloc(sizeof(Wave));
-                (*waves)[*nb_waves - 1]->income = stringToInt(values[0]);
-                (*waves)[*nb_waves - 1]->enemy_list = NULL;
+                (*waves)[*nb_waves - 1] = newWave(stringToInt(values[0]), NULL);
                 break;
             /* Add enemy (int spawn_delay, int row, char type) */
             case 3:
