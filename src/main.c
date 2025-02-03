@@ -219,19 +219,27 @@ typedef struct projectile {
 
 /* Waves */
 typedef struct {
-    Enemy *enemies;  // Enemies of the wave
-    int income;      // Funds gain before the wave to build towers
+    Enemy *enemy_list;  // Enemies of the wave
+    int income;         // Funds gain before the wave to build towers
 } Wave;
 
 /* Game structure, composed of multiple waves */
 typedef struct {
-    Tower *towers;   // Tower
-    Enemy *enemies;  // Enemies
-    int funds;       // Availible funds to build tower
-    int turn_nb;     // Turn number
+    Wave **waves;                    // Array of waves
+    int nb_waves;                    // Number of waves
+    int current_wave_nb;             // Current wave
+    Tower *tower_list;               // Towers
+    Tower *currently_acting_tower;   // Tower currently acting
+    Enemy *enemy_list;               // Enemies
+    Enemy *currently_acting_enemy;   // Enemy currently acting
+    Projectile *projectile_list;     // Projectiles
+    TextElement *text_element_list;  // Text elements representing damage numbers
+    int funds;                       // Availible funds to build tower
+    int score;                       // Player score
+    int turn_nb;                     // Turn number
+    int game_phase;                  // Current game phase, determine what type of actions to handle next
+    char *level_name;                // Name of the played level
 } Game;
-
-
 
 
 
@@ -290,6 +298,10 @@ void destroyProjectile(Projectile *projectile, Projectile **projectile_list);
 bool hasProjectileReachedTarget(Projectile *projectile);
 void updateProjectiles(Projectile **projectile_list, Enemy **enemy_list, Tower *tower_list, TextElement **text_element_list, int *score);
 void drawProjectiles(SDL_Renderer *rend, Projectile *projectile_list);
+Game *createNewGame(char *level_name);
+Game *loadGameFromSave(char *save_file);
+bool loadNextWave(Game *game);
+void startNextWave(Game *game);
 bool isWhitespace(char c);
 bool readValue(char **line, char **value);
 bool readLine(FILE *file, char ***values, int *nb_values);
@@ -305,10 +317,9 @@ void drawImgStatic(SDL_Renderer *rend, SDL_Surface *img, int pos_x, int pos_y, i
 void drawImgDynamic(SDL_Renderer *rend, SDL_Surface *img, int pos_x, int pos_y, int width, int height, Animation *anim);
 void drawRect(SDL_Renderer *rend, int pos_x, int pos_y, int width, int height, int red, int green, int blue, int alpha);
 void drawFilledRect(SDL_Renderer *rend, int pos_x, int pos_y, int width, int height, int red, int green, int blue, int alpha);
-void freeEverything(Enemy **enemy_list,Tower **tower_list);
 
 Tower *upgradeTower(Tower **tower_list, Enemy *enemy_list, char tower_type, int placement_collumn, int placement_row, int *funds);
-bool SaveGame(const char *name,Enemy **enemy_list, Tower **tower_list,const char *level_name,int wave_nb,int funds,int score);
+bool saveGame(const char *save_name, Game *game);
 bool loadSave(const char *save, Enemy **enemy_list, Tower **tower_list, char *level_name, int *funds, int *actual_wave, int *score);
 
 
@@ -1318,11 +1329,8 @@ bool damageEnemy(Enemy *enemy, int amount, Enemy **enemy_list, Tower *tower_list
 
 
 Tower *addTower(Tower **tower_list, Enemy *enemy_list, char tower_type, int placement_collumn, int placement_row, int life_points) {
-    /* Invalid position */
-    if (1 > placement_row || placement_row > NB_ROWS || 1 > placement_collumn || placement_collumn > NB_COLLUMNS) {
-        printf("[ERROR]    Invalid position for tower (x=%d, y=%d)", placement_collumn, placement_row);
-        return NULL;
-    }
+    /* Invalid position (cannot place outside of the map or on the last collumn) */
+    if (1 > placement_row || placement_row > NB_ROWS || 1 > placement_collumn || placement_collumn > NB_COLLUMNS-1) return NULL;
 
     /* Initialize a new tower object */
     Tower *new_tower = malloc(sizeof(Tower));
@@ -1800,6 +1808,142 @@ void drawProjectiles(SDL_Renderer *rend, Projectile *projectile_list) {
 
 
 
+
+/* Create a new game */
+Game *createNewGame(char *level_name) {
+    /* Initialize the new game object */
+    Game *new_game = malloc(sizeof(Game));
+    new_game->waves = NULL;
+    new_game->nb_waves = 0;
+    new_game->current_wave_nb = 0;
+    new_game->tower_list = NULL;
+    new_game->currently_acting_tower = NULL;
+    new_game->enemy_list = NULL;
+    new_game->currently_acting_enemy = NULL;
+    new_game->projectile_list = NULL;
+    new_game->text_element_list = NULL;
+    new_game->funds = 0;
+    new_game->score = 0;
+    new_game->turn_nb = 0;
+    new_game->game_phase = PRE_WAVE_PHASE;
+    new_game->level_name = level_name;
+    /* Load the level */
+    loadLevel(level_name, &new_game->waves, &new_game->nb_waves);
+    /* Load initial wave */
+    if (new_game->nb_waves) loadNextWave(new_game);
+    return new_game;
+}
+
+/* Load a game from a save file */
+// TODO!
+Game *loadGameFromSave(char *save_file);
+
+/* Load next wave, return true if successfull */
+bool loadNextWave(Game *game) {
+    if (game->current_wave_nb >= game->nb_waves) return false;
+    game->current_wave_nb++;
+    /* Destroy any remaining enemy and load new wave */
+    while (game->enemy_list) destroyEnemy(game->enemy_list, &game->enemy_list);
+    game->enemy_list = game->waves[game->current_wave_nb-1]->enemy_list;
+    /* Give wave income */
+    game->funds += game->waves[game->current_wave_nb-1]->income;
+    /* Reset game phase */
+    game->game_phase = PRE_WAVE_PHASE;
+    return true;
+}
+
+/* Launch next wave */
+void startNextWave(Game *game) {
+    game->game_phase = TOWERS_ATTACKING_PHASE;
+}
+
+/* Update game */
+void updateGame(Game *game) {
+    /* Update game phase */
+    bool condition; Enemy *enemy; Tower *tower;
+    switch (game->game_phase) {
+        case PRE_WAVE_PHASE:
+            break;
+        case ENEMIES_MOVING_PHASE:
+            /* Change phase when all enemies have finished moving and gone back to their idle animation */
+            condition = true; enemy = game->enemy_list;
+            while (enemy && condition) {
+                if (enemy->anim && enemy->anim->type != IDLE_ANIMATION) condition = false;
+                enemy = enemy->next;
+            }
+            /* Change phase */
+            if (condition) {
+                game->game_phase = TOWERS_ATTACKING_PHASE;
+                makeAllTowersAct(game->tower_list, &game->currently_acting_tower);
+                game->currently_acting_tower = game->tower_list;
+            }
+            break;
+        case TOWERS_ATTACKING_PHASE:
+            /* Change phase when towers have attacked, no projectiles are left and all enemies have stoped gone back to their idle animation */
+            condition = true; enemy = game->enemy_list;
+            while (enemy && condition) {
+                if (enemy->anim && enemy->anim->type != IDLE_ANIMATION) condition = false;
+                
+                enemy = enemy->next;
+            }
+            /* Change phase */
+            if (!game->currently_acting_tower && !game->projectile_list && condition) {
+                game->game_phase = ENEMIES_ATTACKING_PHASE;
+                makeAllEnemiesAct(game->enemy_list, &game->currently_acting_enemy);
+            }
+            break;
+        case ENEMIES_ATTACKING_PHASE:
+            /* Change phase when enemies have finished attacking and gone back to their idle animation, same for the towers */
+            condition = true; enemy = game->enemy_list; tower = game->tower_list;
+            while (enemy && condition) {
+                if (enemy->anim && enemy->anim->type != IDLE_ANIMATION) condition = false;
+                enemy = enemy->next;
+            }
+            while (tower && condition) {
+                if (tower->anim && tower->anim->type != IDLE_ANIMATION) condition = false;
+                tower = tower->next;
+            }
+            /* Change phase */
+            if (!game->currently_acting_enemy && condition) {
+                game->game_phase = ENEMIES_MOVING_PHASE;
+                makeAllEnemiesMove(game->enemy_list, game->tower_list);
+            }
+            break;
+        case WAVE_DEAFEATED_PHASE:
+            break;
+        case GAME_OVER_PHASE:
+            break;
+        default:
+            break;
+    }
+    /* Victory condition */
+    /* Defeat condition */
+    /* Wave defeated */
+    if (!game->enemy_list && game->current_wave_nb < game->nb_waves) loadNextWave(game);
+    /* Update all game entities */
+    updateProjectiles(&game->projectile_list, &game->enemy_list, game->tower_list, &game->text_element_list, &game->score);
+    updateEnemies(&game->currently_acting_enemy, &game->enemy_list, &game->tower_list, &game->text_element_list);
+    updateTowers(&game->currently_acting_tower, &game->tower_list, game->enemy_list, &game->projectile_list);
+}
+
+/* Destroy a game structure and free its allocated memory */
+void destroyGame(Game *game) {
+    /* Destroy all enemies */
+    while (game->enemy_list) destroyEnemy(game->enemy_list, &game->enemy_list);
+    /* Destroy all towers */
+    while (game->tower_list) destroyTower(game->tower_list, &game->tower_list);
+    /* Destroy all projectiles */
+    while (game->projectile_list) destroyProjectile(game->projectile_list, &game->projectile_list);
+    /* Destroy all text elements (damage numbers) */
+    while (game->text_element_list) destroyTextElement(game->text_element_list, &game->text_element_list);
+    /* Destroy all waves */
+    for (int i = game->nb_waves; i > 0; i--) free(game->waves[i-1]);
+}
+
+
+
+
+
 /* Return if the caracter is considered to be a whitespace */
 bool isWhitespace(char c) {
     return (!c) || (c == ' ') || (c == '\n') || (c == '\r') || (c == '\t');
@@ -1870,7 +2014,7 @@ bool loadLevel(const char *path, Wave ***waves, int *nb_waves) {
                 *waves = realloc(*waves, (*nb_waves) * sizeof(Wave *));
                 (*waves)[*nb_waves - 1] = malloc(sizeof(Wave));
                 (*waves)[*nb_waves - 1]->income = stringToInt(values[0]);
-                (*waves)[*nb_waves - 1]->enemies = NULL;
+                (*waves)[*nb_waves - 1]->enemy_list = NULL;
                 break;
             /* Add enemy (int spawn_delay, int row, char type) */
             case 3:
@@ -1880,7 +2024,7 @@ bool loadLevel(const char *path, Wave ***waves, int *nb_waves) {
                     fclose(file);
                     return false;
                 }
-                addEnemy(&(*waves)[*nb_waves - 1]->enemies, values[2][0], NB_COLLUMNS + stringToInt(values[0]), stringToInt(values[1]), -1);
+                addEnemy(&(*waves)[*nb_waves - 1]->enemy_list, values[2][0], NB_COLLUMNS + stringToInt(values[0]), stringToInt(values[1]), -1);
                 break;
             /* Invalid value count on line */
             default:
@@ -1898,9 +2042,9 @@ bool loadLevel(const char *path, Wave ***waves, int *nb_waves) {
     fclose(file);
     return true;
 }
-bool SaveGame(const char *name,Enemy **enemy_list, Tower **tower_list,const char *level_name,int wave_nb,int funds,int score){
-    /* Save the game in a text file*/
-    char *partial_path = concatString("../assets/saves/", name);
+bool saveGame(const char *save_name, Game *game){
+    /* Save the game in a text file */
+    char *partial_path = concatString("../assets/saves/", save_name);
     char *full_path = concatString(partial_path, ".txt");
     FILE *file = fopen(full_path, "w");
     free(partial_path);
@@ -1909,18 +2053,18 @@ bool SaveGame(const char *name,Enemy **enemy_list, Tower **tower_list,const char
         free(full_path);
         return false;
     }
-    /*we write the header with all keys infos that need to be saved and used when charging the save */
-    fprintf(file,"%s %d %d %d \n",level_name,wave_nb,funds,score);
-    /* we add all the tower and the enemy file with all their caracteristics */
-    Tower *currentT = *tower_list;
-    while(currentT){
-        fprintf(file, "T %c %d %d %d\n", currentT->type, currentT->row, currentT->collumn, currentT->life_points);
-        currentT = currentT->next;
+    /* Write the header with all keys infos that need to be saved and used when charging the save */
+    fprintf(file,"%s %d %d %d \n", game->level_name, game->current_wave_nb, game->funds, game->score);
+    /* Add all the tower and the enemy file with all their characteristics */
+    Tower *current_tower = game->tower_list;
+    while(current_tower) {
+        fprintf(file, "T %c %d %d %d\n", current_tower->type, current_tower->row, current_tower->collumn, current_tower->life_points);
+        current_tower = current_tower->next;
     }
-    Enemy *currentE = *enemy_list;
-    while(currentE){
-        fprintf(file, "E %c %d %d %d\n", currentE->type, currentE->row, currentE->collumn, currentE->life_points);
-        currentE = currentE->next;
+    Enemy *current_enemy = game->enemy_list;
+    while(current_enemy){
+        fprintf(file, "E %c %d %d %d\n", current_enemy->type, current_enemy->row, current_enemy->collumn, current_enemy->life_points);
+        current_enemy = current_enemy->next;
     }
     free(full_path);
     fclose(file);
@@ -2039,14 +2183,7 @@ void drawEnemiesAndTowers(SDL_Renderer *rend, Enemy *enemy_list, Tower *tower_li
     free(first_of_each_row);
 }
 
-void freeEverything(Enemy **enemy_list,Tower **tower_list){
-    while(*enemy_list){
-        destroyEnemy(*enemy_list,enemy_list);
-    }
-    while(*tower_list){
-        destroyTower(*tower_list,tower_list);
-    }
-}
+
 
 
 /* Convert a rect from a dynamic position (dependant of the camera position) to a static position (constant) */
@@ -2172,9 +2309,6 @@ int main(int argc, char* argv[]) {
     SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, ANTI_ALIASING);
 
     // [TEMPORARY]
-    Wave **waves; int nb_waves,actual_wave=0;
-    loadLevel("level_test", &waves, &nb_waves);
-    Enemy *enemy_list = NULL; Tower *tower_list = NULL; Projectile *projectile_list = NULL;
     TextElement *win_text_surface = addTextElement(NULL, "YOU DEFEATED THE SWARM !", 4.0, (SDL_Color) {255, 255, 255, 255}, (SDL_Color) {0, 0, 0, 255}, (SDL_Rect) {0, 0, WINDOW_WIDTH, WINDOW_HEIGHT}, true, false, NULL);
 
     /* Load images */
@@ -2184,15 +2318,12 @@ int main(int argc, char* argv[]) {
     SDL_Surface *highlighted_tile = loadImg("others/tile_choosed");SDL_Surface *delete_tower = loadImg("others/delete"); SDL_Surface *quit_menu = loadImg("others/quit");
     char TowersNames[4][MAX_LENGTH_TOWER_NAME] = {"Archer Tower 50G", "Wall 25G", "Canon 100G", "Sorcerer tower 75G"};
 
+    /* Load game */
+    Game *game = createNewGame("level_test");
+
     /* Main loop */
     Tower *towerOnTile;
-    Enemy *enemy; Tower *tower; bool condition;
-    int nb_turns=0,funds=0,score=0;
-    int var;
-    funds+=waves[0]->income;
-    TextElement *text_element_list = NULL;
-    int game_phase = PRE_WAVE_PHASE;
-    Enemy *currently_acting_enemy = NULL; Tower *currently_acting_tower = NULL;
+    int var; Enemy *enemy;
     int cam_x_speed = 0, cam_y_speed = 0, cam_speed_mult = 0;
     int *selected_tile_pos = malloc(2 * sizeof(int)); selected_tile_pos[0] = 0; selected_tile_pos[1] = 0;
     bool menu_hidden = true;
@@ -2201,18 +2332,6 @@ int main(int argc, char* argv[]) {
     SDL_Event event;
     bool running = true;
     while (running) {
-        /* Process events */
-        if (enemy_list == NULL) {
-            if (actual_wave < nb_waves) {
-                game_phase = PRE_WAVE_PHASE;
-                funds += waves[actual_wave]->income;
-                enemy_list = waves[actual_wave]->enemies;
-                actual_wave += 1;
-            }
-            else {
-                drawTextElement(rend, &win_text_surface);
-            }
-        }
         while (SDL_PollEvent(&event)) {
             switch (event.type) {
                 /* Quit the game */
@@ -2252,7 +2371,7 @@ int main(int argc, char* argv[]) {
                             cam_x_speed = +1;
                             break;
                         case SDL_SCANCODE_X:
-                            SaveGame("save1",&enemy_list,&tower_list,"level_test.txt",actual_wave,funds,score);
+                            saveGame("save1", game);
                             break;
                         case SDL_SCANCODE_LSHIFT:
                             cam_speed_mult = +1;
@@ -2262,7 +2381,7 @@ int main(int argc, char* argv[]) {
                             break;
                         /* Start the wave */
                         case SDL_SCANCODE_SPACE:
-                            if (game_phase == PRE_WAVE_PHASE) game_phase = TOWERS_ATTACKING_PHASE;
+                            if (game->game_phase == PRE_WAVE_PHASE) startNextWave(game);
                             break;
                         default:
                             break;
@@ -2308,8 +2427,8 @@ int main(int argc, char* argv[]) {
                                 selected_tile_pos[0] = event.button.x;
                                 selected_tile_pos[1] = event.button.y;
                                 pixelToTile(&selected_tile_pos[0], &selected_tile_pos[1]);
-                                
-                                if (1 <= selected_tile_pos[0] && selected_tile_pos[0] <= NB_COLLUMNS && 1 <= selected_tile_pos[1] && selected_tile_pos[1] <= NB_ROWS) {
+                                /* Check if tile is on map (last collumn cannot be build on) */
+                                if (1 <= selected_tile_pos[0] && selected_tile_pos[0] <= NB_COLLUMNS-1 && 1 <= selected_tile_pos[1] && selected_tile_pos[1] <= NB_ROWS) {
                                     menu_hidden = false;
                                 }
                                 else {
@@ -2317,38 +2436,40 @@ int main(int argc, char* argv[]) {
                                     menu_hidden = true;
                                 }
                             }
-                            else if (getEnemyAndTowerAt(NULL, tower_list, selected_tile_pos[0], selected_tile_pos[1], NULL, &towerOnTile)){
+                            /* Construction menu selected */
+                            /* Tile with tower selected */
+                            else if (getEnemyAndTowerAt(NULL, game->tower_list, selected_tile_pos[0], selected_tile_pos[1], NULL, &towerOnTile)){
                                 if (WINDOW_WIDTH-SPRITE_SIZE/2 <= event.button.x && event.button.x <= WINDOW_WIDTH && 0 <= event.button.y && event.button.y <= SPRITE_SIZE/2){
                                     /* Clicked on the X to quit the menu */
                                     menu_hidden = true;
                                 }
                                 else if (SPRITE_SIZE/2 <= event.button.x && event.button.x <= 2*SPRITE_SIZE/2 && 0 <= event.button.y && event.button.y <= SPRITE_SIZE/2){
-                                    sellTower(towerOnTile, &tower_list, &funds);
+                                    sellTower(towerOnTile, &game->tower_list, &game->funds);
                                     menu_hidden = true;
                                 }
                                 else if (0 <= event.button.x && event.button.x <= SPRITE_SIZE/2 && 0 <= event.button.y && event.button.y <= SPRITE_SIZE/2){
                                     /* Clicked on the turret upgrade */
-                                    upgradeTower(&tower_list, enemy_list, towerOnTile->type, selected_tile_pos[0], selected_tile_pos[1], &funds);
+                                    upgradeTower(&game->tower_list, game->enemy_list, towerOnTile->type, selected_tile_pos[0], selected_tile_pos[1], &game->funds);
                                     menu_hidden=true;
                                 }
                             }
-                            /* If menu selected and player clicks on a tower icon, try to buy and place tower (if possible) */
+                            /* Tile with no tower selected */
                             else {
-                                //archer tower
-                                if (50 <= event.button.x && event.button.x <= SPRITE_SIZE/2+50 && 0 <= event.button.y && event.button.y <= SPRITE_SIZE/2) {
-                                    if (buyTower(&tower_list, enemy_list, ARCHER_TOWER, selected_tile_pos[0], selected_tile_pos[1], &funds)) menu_hidden = true;
+                                /* Archer tower */
+                                if (SPRITE_SIZE*0/2 + 50 <= event.button.x && event.button.x <= SPRITE_SIZE*1/2 + 50 && 0 <= event.button.y && event.button.y <= SPRITE_SIZE/2) {
+                                    if (buyTower(&game->tower_list, game->enemy_list, ARCHER_TOWER, selected_tile_pos[0], selected_tile_pos[1], &game->funds)) menu_hidden = true;
                                 }
-                                // wall tower
-                                else if (SPRITE_SIZE/2+50 <= event.button.x && event.button.x <= 2*SPRITE_SIZE/2 +50 && 0 <= event.button.y && event.button.y <= SPRITE_SIZE/2) {
-                                    if (buyTower(&tower_list, enemy_list, WALL_TOWER, selected_tile_pos[0], selected_tile_pos[1], &funds)) menu_hidden = true;
+                                /* Wall tower */
+                                else if (SPRITE_SIZE*1/2 + 50 <= event.button.x && event.button.x <= SPRITE_SIZE*2/2 + 50 && 0 <= event.button.y && event.button.y <= SPRITE_SIZE/2) {
+                                    if (buyTower(&game->tower_list, game->enemy_list, WALL_TOWER, selected_tile_pos[0], selected_tile_pos[1], &game->funds)) menu_hidden = true;
                                 }
-                                // cannon tower
-                                else if (2*SPRITE_SIZE/2 +50 <= event.button.x && event.button.x <= 50+3*SPRITE_SIZE/2 && 0 <= event.button.y && event.button.y <= SPRITE_SIZE/2) {
-                                    if (buyTower(&tower_list, enemy_list, CANON_TOWER, selected_tile_pos[0], selected_tile_pos[1], &funds)) menu_hidden = true;
+                                /* Canon tower */
+                                else if (SPRITE_SIZE*2/2 +50 <= event.button.x && event.button.x <= SPRITE_SIZE*3/2 + 50 && 0 <= event.button.y && event.button.y <= SPRITE_SIZE/2) {
+                                    if (buyTower(&game->tower_list, game->enemy_list, CANON_TOWER, selected_tile_pos[0], selected_tile_pos[1], &game->funds)) menu_hidden = true;
                                 }
-                                //sorcerer tower
-                                else if (3*SPRITE_SIZE/2 +50 <= event.button.x && event.button.x <= 4*SPRITE_SIZE/2+50 && 0 <= event.button.y && event.button.y <= SPRITE_SIZE/2) {
-                                    if (buyTower(&tower_list, enemy_list, SORCERER_TOWER, selected_tile_pos[0], selected_tile_pos[1], &funds)) menu_hidden = true;
+                                /* Sorcerer tower */
+                                else if (SPRITE_SIZE*3/2 +50 <= event.button.x && event.button.x <= SPRITE_SIZE*4/2 + 50 && 0 <= event.button.y && event.button.y <= SPRITE_SIZE/2) {
+                                    if (buyTower(&game->tower_list, game->enemy_list, SORCERER_TOWER, selected_tile_pos[0], selected_tile_pos[1], &game->funds)) menu_hidden = true;
                                 }
                                 else if (WINDOW_WIDTH-SPRITE_SIZE/2 <= event.button.x && event.button.x <= WINDOW_WIDTH && 0 <= event.button.y && event.button.y <= SPRITE_SIZE/2){
                                     /* Clicked on the X to quit the menu */
@@ -2390,69 +2511,8 @@ int main(int argc, char* argv[]) {
         
         }
 
-        /* Update game phase */
-        switch (game_phase) {
-            case PRE_WAVE_PHASE:
-                break;
-            case ENEMIES_MOVING_PHASE:
-                /* Change phase when all enemies have finished moving and gone back to their idle animation */
-                condition = true; enemy = enemy_list;
-                while (enemy && condition) {
-                    if (enemy->anim && enemy->anim->type != IDLE_ANIMATION) condition = false;
-                    enemy = enemy->next;
-                }
-                /* Change phase */
-                if (condition) {
-                    game_phase = TOWERS_ATTACKING_PHASE;
-                    makeAllTowersAct(tower_list, &currently_acting_tower);
-                    currently_acting_tower = tower_list;
-                }
-                break;
-            case TOWERS_ATTACKING_PHASE:
-                /* Change phase when towers have attacked, no projectiles are left and all enemies have stoped gone back to their idle animation */
-                condition = true; enemy = enemy_list;
-                while (enemy && condition) {
-                    if (enemy->anim && enemy->anim->type != IDLE_ANIMATION) condition = false;
-                    
-                    enemy = enemy->next;
-                }
-                /* Change phase */
-                if (!currently_acting_tower && !projectile_list && condition) {
-                    game_phase = ENEMIES_ATTACKING_PHASE;
-                    makeAllEnemiesAct(enemy_list, &currently_acting_enemy);
-                }
-                break;
-            case ENEMIES_ATTACKING_PHASE:
-                /* Change phase when enemies have finished attacking and gone back to their idle animation, same for the towers */
-                condition = true; enemy = enemy_list; tower = tower_list;
-                while (enemy && condition) {
-                    if (enemy->anim && enemy->anim->type != IDLE_ANIMATION) condition = false;
-                    enemy = enemy->next;
-                }
-                while (tower && condition) {
-                    if (tower->anim && tower->anim->type != IDLE_ANIMATION) condition = false;
-                    tower = tower->next;
-                }
-                /* Change phase */
-                if (!currently_acting_enemy && condition) {
-                    game_phase = ENEMIES_MOVING_PHASE;
-                    makeAllEnemiesMove(enemy_list, tower_list);
-                }
-                break;
-            case WAVE_DEAFEATED_PHASE:
-                
-                break;
-            case GAME_OVER_PHASE:
-                
-                break;
-            default:
-                break;
-        }
-
-        /* Update entities */
-        updateProjectiles(&projectile_list, &enemy_list, tower_list, &text_element_list, &score);
-        updateEnemies(&currently_acting_enemy, &enemy_list, &tower_list, &text_element_list);
-        updateTowers(&currently_acting_tower, &tower_list, enemy_list, &projectile_list);
+        /* Update game */
+        updateGame(game);
 
         /* Clear screen */
         SDL_SetRenderDrawColor(rend, 0, 0, 0, 255);
@@ -2469,8 +2529,8 @@ int main(int argc, char* argv[]) {
             drawImgDynamic(rend, grass_tiles[x%2 + (y%2) * 2], TILE_WIDTH * x, TILE_HEIGHT * y, SPRITE_SIZE, SPRITE_SIZE, NULL);
         }
         /* Draw additional grass tiles for enemy preview, only in pre-wave game phase */
-        if (game_phase == PRE_WAVE_PHASE) {
-            var = 0; enemy = enemy_list;
+        if (game->game_phase == PRE_WAVE_PHASE) {
+            var = 0; enemy = game->enemy_list;
             while (enemy) {
                 var = max(var, enemy->collumn - NB_COLLUMNS);
                 enemy = enemy->next;
@@ -2480,17 +2540,17 @@ int main(int argc, char* argv[]) {
             }
         }
         /* Draw entities */
-        drawEnemiesAndTowers(rend, enemy_list, tower_list, game_phase);
-        drawProjectiles(rend, projectile_list);
+        drawEnemiesAndTowers(rend, game->enemy_list, game->tower_list, game->game_phase);
+        drawProjectiles(rend, game->projectile_list);
         /* Draw damage numbers */
-        drawTextElement(rend, &text_element_list);
+        drawTextElement(rend, &game->text_element_list);
         /* Draw the Menu if necessary */
         if (!menu_hidden) {
             drawImgDynamic(rend, highlighted_tile, (selected_tile_pos[0]-1)*TILE_WIDTH, (selected_tile_pos[1]-1)*TILE_HEIGHT, SPRITE_SIZE, SPRITE_SIZE, NULL);
             drawFilledRect(rend, 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT/4 + 10, 128, 128, 128, 255);
             drawRect(rend, 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT/4 + 10, 255, 255, 255, 255);
 
-            if (!getEnemyAndTowerAt(NULL, tower_list, selected_tile_pos[0], selected_tile_pos[1], NULL, &towerOnTile)) {
+            if (!getEnemyAndTowerAt(NULL, game->tower_list, selected_tile_pos[0], selected_tile_pos[1], NULL, &towerOnTile)) {
                 for (unsigned long long i = 0; i < sizeof(towers)/sizeof(towers[0]); i++) {
                     drawImgStatic(rend, towers[i], i*SPRITE_SIZE/2+50, 0, SPRITE_SIZE/2, SPRITE_SIZE/2, NULL);
                     
@@ -2521,14 +2581,14 @@ int main(int argc, char* argv[]) {
         SDL_Delay(max(1000/FPS - (SDL_GetTicks64()-CURRENT_TICK), 0));
         CURRENT_TICK = SDL_GetTicks64();
     }
-    
+
     /* Free allocated memory */
     delImg(delete_tower); delImg(quit_menu);
     for (int i = 4; i > 0; i--) delImg(towers[i-1]);
     for (int i = 8; i > 0; i--) delImg(grass_tiles[i-1]);
     for (int i = 3; i > 0; i--) delImg(towers_upgrades[i-1]);
     free(selected_tile_pos);
-    freeEverything(&enemy_list,&tower_list);
+    destroyGame(game);
     /* Release resources */
     SDL_DestroyRenderer(rend);
     SDL_DestroyWindow(wind);
