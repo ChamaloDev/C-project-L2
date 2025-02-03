@@ -48,8 +48,13 @@
 #define ENEMIES_MOVING_PHASE 1
 #define TOWERS_ATTACKING_PHASE 2
 #define ENEMIES_ATTACKING_PHASE 3
-#define WAVE_DEAFEATED_PHASE 4
+#define VICTORY_PHASE 4
 #define GAME_OVER_PHASE 5
+
+
+
+/* Survival mode level name */
+#define SURVIVAL_MODE "$urv1v@lM0d3"
 
 
 
@@ -243,6 +248,7 @@ typedef struct {
 
 /* Header */
 int randrange(int a, int b);
+bool roll(double p);
 int sign(double x);
 double min(double x, double y);
 double max(double x, double y);
@@ -299,6 +305,7 @@ Game *createNewGame(char *level_name);
 Game *loadGameFromSave(char *save_file);
 bool loadNextWave(Game *game);
 void startNextWave(Game *game);
+void beguinNewSurvivalWave(Game *game);
 bool isWhitespace(char c);
 bool readValue(char **line, char **value);
 bool readLine(FILE *file, char ***values, int *nb_values);
@@ -324,6 +331,16 @@ bool loadSave(const char *save, Enemy **enemy_list, Tower **tower_list, char *le
 /* Return an integer between a and b (included) */
 int randrange(int a, int b) {
     return positive_mod(rand(), abs(b-a)+1) + min(a, b);
+}
+
+/* Has p chance to return true, and 1-p chance to return false */
+bool roll(double p) {
+    /* Roll precision */
+    int precision = 10000;
+    /* p must be a value between 0.0 and 1.0 included */
+    p = min(max(0.0, p), 1.0);
+    /* Return the roll */
+    return (p * precision > randrange(0, precision));
 }
 
 /* Return the sign of a number */
@@ -1833,7 +1850,14 @@ Game *createNewGame(char *level_name) {
     new_game->game_phase = PRE_WAVE_PHASE;
     new_game->level_name = level_name;
     /* Load the level */
-    loadLevel(level_name, &new_game->waves, &new_game->nb_waves);
+    if (!strcmp(level_name, SURVIVAL_MODE)) {
+        /* SUrvival mode pre-wave, no enemies, only income */
+        Wave *pre_wave = malloc(sizeof(Wave));
+        pre_wave->income = 2025;
+        pre_wave->enemy_list = NULL;
+        new_game->waves = &pre_wave;
+    }
+    else loadLevel(level_name, &new_game->waves, &new_game->nb_waves);
     /* Load initial wave */
     if (new_game->nb_waves) loadNextWave(new_game);
     return new_game;
@@ -1914,17 +1938,24 @@ void updateGame(Game *game) {
                 makeAllEnemiesMove(game->enemy_list, game->tower_list);
             }
             break;
-        case WAVE_DEAFEATED_PHASE:
+        case VICTORY_PHASE:
             break;
         case GAME_OVER_PHASE:
             break;
         default:
             break;
     }
-    /* Victory condition */
     /* Defeat condition */
-    /* Wave defeated */
-    if (!game->enemy_list && game->current_wave_nb < game->nb_waves) loadNextWave(game);
+    // TODO!
+    /* On wave defeated */
+    if (!game->enemy_list && game->game_phase != PRE_WAVE_PHASE) {
+        /* If currently on survival mode */
+        if (!strcmp(game->level_name, SURVIVAL_MODE)) beguinNewSurvivalWave(game);
+        /* If defeated a wave */
+        else if (game->current_wave_nb < game->nb_waves) loadNextWave(game);
+        /* If defeated last wave (victory) */
+        else game->game_phase = VICTORY_PHASE;
+    }
     /* Update all game entities */
     updateProjectiles(&game->projectile_list, &game->enemy_list, game->tower_list, &game->text_element_list, &game->score);
     updateEnemies(&game->currently_acting_enemy, &game->enemy_list, &game->tower_list, &game->text_element_list);
@@ -1945,6 +1976,71 @@ void destroyGame(Game *game) {
     for (int i = game->nb_waves; i > 0; i--) free(game->waves[i-1]);
 }
 
+/* Launch a new random wave of enemy for survival mode */
+void beguinNewSurvivalWave(Game *game) {
+    if (!game) return;
+
+    /* Delete the old wave */
+    while (game->enemy_list) destroyEnemy(game->enemy_list, &game->enemy_list);
+    for (int i = game->nb_waves; i > 0; i--) free(game->waves[i-1]);
+
+    /* Build the new survival wave */
+    /* Wave power determine how strong are the wave enemies and how numerous they are */
+    int wave_power = 500 + game->score;
+    /* Initialize new wave object */
+    Wave *new_wave = malloc(sizeof(Wave));
+    new_wave->income = 0;
+    new_wave->enemy_list = NULL;
+    /* Add enemies to the wave */
+    char enemy_type; int collumn, row;
+    while (wave_power > 0) {
+        /* Chose enemy type */
+        /* Add a necromancer enemy */
+        if (roll(1.0 - 8000.0/(8000.0 + wave_power))) {
+            enemy_type = NECROMANCER_ENEMY;
+            wave_power -= 1000;
+        }
+        /* Add an orc enemy */
+        else if (roll(1.0 - 5000.0/(5000.0 + wave_power))) {
+            enemy_type = ORC_ENEMY;
+            wave_power -= 600;
+        }
+        /* Add a goblin enemy */
+        else if (roll(1.0 - 2000.0/(2000.0 + wave_power))) {
+            enemy_type = GOBLIN_ENEMY;
+            wave_power -= 200;
+        }
+        /* Add a gelly enemy */
+        else if (roll(1.0 - 1000.0/(1000.0 + wave_power))) {
+            enemy_type = GELLY_ENEMY;
+            wave_power -= 150;
+        }
+        /* Add a slime enemy */
+        else {
+            enemy_type = SLIME_ENEMY;
+            wave_power -= 100;
+        }
+        /* Chose enemy position */
+        collumn = randrange(0, 5) + NB_COLLUMNS + 1;
+        row = randrange(0, NB_ROWS) + 1;
+        /* Check if tile is free for the enemy to spawn, otherwise try another position further right */
+        while (!isTileEmpty(new_wave->enemy_list, NULL, collumn, row)) {
+            collumn += randrange(0, 3) + 1;
+            row = randrange(0, NB_ROWS) + 1;
+        }
+        /* Add the enemy to the wave */
+        addEnemy(&new_wave->enemy_list, enemy_type, collumn, row, -1);
+    }
+
+    /* Launch the new survival wave */
+    int wave_nb = game->current_wave_nb;
+    game->waves = &new_wave;
+    game->current_wave_nb = 0;
+    game->nb_waves = 1;
+    loadNextWave(game);
+    game->current_wave_nb = wave_nb + 1;
+    startNextWave(game);
+}
 
 
 
@@ -2047,6 +2143,7 @@ bool loadLevel(const char *path, Wave ***waves, int *nb_waves) {
     fclose(file);
     return true;
 }
+
 bool saveGame(const char *save_name, Game *game){
     /* Save the game in a text file */
     char *partial_path = concatString("../assets/saves/", save_name);
@@ -2129,6 +2226,7 @@ bool loadSave(const char *save, Enemy **enemy_list, Tower **tower_list, char *le
     fclose(file);
     return true;
 }
+
 
 
 
@@ -2285,6 +2383,9 @@ void drawRectDynamic(SDL_Renderer *rend, int pos_x, int pos_y, int width, int he
     drawRect(rend, rect.x, rect.y, rect.w, rect.h, red, green, blue, alpha);
 }
 
+
+
+
 int main(int argc, char* argv[]) {
     /* Initialize a new random seed */
     srand(time(NULL));
@@ -2324,7 +2425,7 @@ int main(int argc, char* argv[]) {
     char TowersNames[4][MAX_LENGTH_TOWER_NAME] = {"Archer Tower 50G", "Wall 25G", "Canon 100G", "Sorcerer tower 75G"};
 
     /* Load game */
-    Game *game = createNewGame("level_test");
+    Game *game = createNewGame(SURVIVAL_MODE);
 
     /* Main loop */
     Tower *towerOnTile;
