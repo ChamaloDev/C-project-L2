@@ -2657,15 +2657,15 @@ int main(int argc, char* argv[]) {
                             /* Construction menu selected */
                             /* Tile with tower selected */
                             else if (getEnemyAndTowerAt(NULL, game->tower_list, selected_tile_pos[0], selected_tile_pos[1], NULL, &towerOnTile)){
-                                if (WINDOW_WIDTH-SPRITE_SIZE/2 <= event.button.x && event.button.x <= WINDOW_WIDTH && 0 <= event.button.y && event.button.y <= SPRITE_SIZE/2){
+                                if (WINDOW_WIDTH - WINDOW_HEIGHT/4 <= event.button.x && event.button.x <= WINDOW_WIDTH && 0 <= event.button.y && event.button.y <= WINDOW_HEIGHT/4){
                                     /* Clicked on the X to quit the menu */
                                     menu_hidden = true;
                                 }
-                                else if (SPRITE_SIZE/2 <= event.button.x && event.button.x <= 2*SPRITE_SIZE/2 && 0 <= event.button.y && event.button.y <= SPRITE_SIZE/2){
+                                else if (WINDOW_HEIGHT/4 <= event.button.x && event.button.x <= WINDOW_HEIGHT*2/4 && 0 <= event.button.y && event.button.y <= WINDOW_HEIGHT/4){
                                     sellTower(towerOnTile, &game->tower_list, &game->funds);
                                     menu_hidden = true;
                                 }
-                                else if (0 <= event.button.x && event.button.x <= SPRITE_SIZE/2 && 0 <= event.button.y && event.button.y <= SPRITE_SIZE/2){
+                                else if (0 <= event.button.x && event.button.x <= WINDOW_HEIGHT/4 && 0 <= event.button.y && event.button.y <= WINDOW_HEIGHT/4){
                                     /* Clicked on the turret upgrade */
                                     upgradeTower(&game->tower_list, game->enemy_list, towerOnTile->type, selected_tile_pos[0], selected_tile_pos[1], &game->funds);
                                     menu_hidden=true;
@@ -2674,22 +2674,22 @@ int main(int argc, char* argv[]) {
                             /* Tile with no tower selected */
                             else {
                                 /* Archer tower */
-                                if (SPRITE_SIZE*0/2 + 50 <= event.button.x && event.button.x <= SPRITE_SIZE*1/2 + 50 && 0 <= event.button.y && event.button.y <= SPRITE_SIZE/2) {
+                                if (WINDOW_HEIGHT*0/4 <= event.button.x && event.button.x <= WINDOW_HEIGHT*1/4 && 0 <= event.button.y && event.button.y <= WINDOW_HEIGHT/4) {
                                     if (buyTower(&game->tower_list, game->enemy_list, ARCHER_TOWER, selected_tile_pos[0], selected_tile_pos[1], &game->funds)) menu_hidden = true;
                                 }
                                 /* Wall tower */
-                                else if (SPRITE_SIZE*1/2 + 50 <= event.button.x && event.button.x <= SPRITE_SIZE*2/2 + 50 && 0 <= event.button.y && event.button.y <= SPRITE_SIZE/2) {
+                                else if (WINDOW_HEIGHT*1/4 <= event.button.x && event.button.x <= WINDOW_HEIGHT*2/4 && 0 <= event.button.y && event.button.y <= WINDOW_HEIGHT/4) {
                                     if (buyTower(&game->tower_list, game->enemy_list, WALL_TOWER, selected_tile_pos[0], selected_tile_pos[1], &game->funds)) menu_hidden = true;
                                 }
                                 /* Canon tower */
-                                else if (SPRITE_SIZE*2/2 +50 <= event.button.x && event.button.x <= SPRITE_SIZE*3/2 + 50 && 0 <= event.button.y && event.button.y <= SPRITE_SIZE/2) {
+                                else if (WINDOW_HEIGHT*2/4 <= event.button.x && event.button.x <= WINDOW_HEIGHT*3/4 && 0 <= event.button.y && event.button.y <= WINDOW_HEIGHT/4) {
                                     if (buyTower(&game->tower_list, game->enemy_list, CANON_TOWER, selected_tile_pos[0], selected_tile_pos[1], &game->funds)) menu_hidden = true;
                                 }
                                 /* Sorcerer tower */
-                                else if (SPRITE_SIZE*3/2 +50 <= event.button.x && event.button.x <= SPRITE_SIZE*4/2 + 50 && 0 <= event.button.y && event.button.y <= SPRITE_SIZE/2) {
+                                else if (WINDOW_HEIGHT*3/4 <= event.button.x && event.button.x <= WINDOW_HEIGHT*4/4 && 0 <= event.button.y && event.button.y <= WINDOW_HEIGHT/4) {
                                     if (buyTower(&game->tower_list, game->enemy_list, SORCERER_TOWER, selected_tile_pos[0], selected_tile_pos[1], &game->funds)) menu_hidden = true;
                                 }
-                                else if (WINDOW_WIDTH-SPRITE_SIZE/2 <= event.button.x && event.button.x <= WINDOW_WIDTH && 0 <= event.button.y && event.button.y <= SPRITE_SIZE/2){
+                                else if (WINDOW_WIDTH-WINDOW_HEIGHT/4 <= event.button.x && event.button.x <= WINDOW_WIDTH && 0 <= event.button.y && event.button.y <= WINDOW_HEIGHT/4){
                                     /* Clicked on the X to quit the menu */
                                     menu_hidden = true;
                                 }
@@ -2789,28 +2789,28 @@ int main(int argc, char* argv[]) {
 
         /* Draw the Menu if necessary */
         if (!menu_hidden) {
-            drawFilledRect(rend, 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT/4 + 10, 128, 128, 128, 255);
-            drawRect(rend, 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT/4 + 10, 255, 255, 255, 255);
+            drawFilledRect(rend, 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT/4, 128, 128, 128, 255);
+            drawRect(rend, 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT/4, 255, 255, 255, 255);
             if (!getEnemyAndTowerAt(NULL, game->tower_list, selected_tile_pos[0], selected_tile_pos[1], NULL, &towerOnTile))
                 for (unsigned long long i = 0; i < sizeof(towers)/sizeof(towers[0]); i++)
-                    drawImgStatic(rend, towers[i], i*SPRITE_SIZE/2+50, 0, SPRITE_SIZE/2, SPRITE_SIZE/2, NULL);
+                    drawImgStatic(rend, towers[i], i*WINDOW_HEIGHT/4, 0, WINDOW_HEIGHT/4, WINDOW_HEIGHT/4, NULL);
             else{
                 switch (towerOnTile->type){
                     case SORCERER_TOWER:
-                        drawImgStatic(rend, towers_upgrades[0], 0, 0, SPRITE_SIZE/2, SPRITE_SIZE/2, NULL);
+                        drawImgStatic(rend, towers_upgrades[0], 0, 0, WINDOW_HEIGHT/4, WINDOW_HEIGHT/4, NULL);
                         break;
                     case CANON_TOWER:
-                        drawImgStatic(rend, towers_upgrades[1], 0, 0, SPRITE_SIZE/2, SPRITE_SIZE/2, NULL);
+                        drawImgStatic(rend, towers_upgrades[1], 0, 0, WINDOW_HEIGHT/4, WINDOW_HEIGHT/4, NULL);
                         break;
                     case WALL_TOWER:
-                        drawImgStatic(rend, towers_upgrades[2], 0, 0, SPRITE_SIZE/2, SPRITE_SIZE/2, NULL);
+                        drawImgStatic(rend, towers_upgrades[2], 0, 0, WINDOW_HEIGHT/4, WINDOW_HEIGHT/4, NULL);
                         break;
                     default:
                         break;
                 }
-                drawImgStatic(rend, delete_tower, SPRITE_SIZE/2, 0, SPRITE_SIZE/2, SPRITE_SIZE/2, NULL);
+                drawImgStatic(rend, delete_tower, WINDOW_HEIGHT/4, 0, WINDOW_HEIGHT/4, WINDOW_HEIGHT/4, NULL);
             }
-            drawImgStatic(rend,quit_menu,WINDOW_WIDTH-SPRITE_SIZE/2,0,SPRITE_SIZE/2,SPRITE_SIZE/2,NULL);
+            drawImgStatic(rend, quit_menu, WINDOW_WIDTH - WINDOW_HEIGHT/4, 0, WINDOW_HEIGHT/4, WINDOW_HEIGHT/4, NULL);
         }
 
         /* Draw text UI (lower display if menu is openned) */
