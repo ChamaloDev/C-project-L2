@@ -17,6 +17,9 @@
 #define FONT_WIDTH 32      // Width of the custom font in px
 #define FONT_HEIGHT 48     // Height of the custom font in px
 
+#define MAX_LENGTH_TOWER_NAME 32
+#define MAX_LENGTH_NICKNAME 32
+
 /* Enemy types */
 #define SLIME_ENEMY 'S'
 #define GELLY_ENEMY 'G'
@@ -253,6 +256,7 @@ double min(double x, double y);
 double max(double x, double y);
 double power(double x, int n);
 char *concatString(const char *a, const char *b);
+char *duplicateString(const char *a);
 int stringToInt(const char *str);
 int positive_div(int i, int n);
 int positive_mod(int i, int n);
@@ -304,6 +308,7 @@ Game *createNewGame(char *level_name);
 Game *loadGameFromSave(char *save_file);
 bool loadNextWave(Game *game);
 void startNextWave(Game *game);
+void updateGame(Game *game, const char *nickname);
 void beguinNewSurvivalWave(Game *game);
 Wave *newWave(int income, Enemy *enemy_list);
 void destroyWaveList(Wave **wave_list, int nb_wave);
@@ -325,7 +330,7 @@ void drawFilledRect(SDL_Renderer *rend, int pos_x, int pos_y, int width, int hei
 
 Tower *upgradeTower(Tower **tower_list, Enemy *enemy_list, char tower_type, int placement_collumn, int placement_row, int *funds);
 bool saveGame(const char *save_name, Game *game);
-bool loadSave(const char *save, Enemy **enemy_list, Tower **tower_list, char *level_name, int *funds, int *actual_wave, int *score);
+
 
 
 
@@ -380,6 +385,13 @@ char *concatString(const char *a, const char *b) {
     return c;
 }
 
+/* Duplicate a string and automaticaly allocate memory */
+char *duplicateString(const char *a) {
+    char *b = malloc(strlen(a) + 1);
+    if (b) strcpy(b, a);
+    return b;
+}
+
 /* Convert a string to an int */
 int stringToInt(const char *str) {
     int n = 0;
@@ -408,7 +420,6 @@ double periodicFunction(Uint64 x) {
     if (x >= 250) return 1.0 - periodicFunctionSub(positive_mod(x, 250) / 1000.0);
     return periodicFunctionSub(0.25 - positive_mod(x, 250) / 1000.0);
 }
-
 
 
 /* Create a new text surface */
@@ -1053,12 +1064,13 @@ Enemy *addEnemy(Enemy **enemy_list, char enemy_type, int spawn_collumn, int spaw
             return NULL;
     }
     /* Initialize life bar */
-    updateLifeBarTextElement(&new_enemy->life_bar, new_enemy->life_points, new_enemy->max_life_points);
+    
     /* If health is manualy set */
     if (!enemy_list) return new_enemy;
     if (life_points != -1){
         new_enemy->life_points = life_points;
     }
+    updateLifeBarTextElement(&new_enemy->life_bar, new_enemy->life_points, new_enemy->max_life_points);
     /* Add the new enemy to the enemy list */
     /* If empty then no search is needed */
     if (!(*enemy_list)) {
@@ -1422,13 +1434,13 @@ Tower *addTower(Tower **tower_list, Enemy *enemy_list, char tower_type, int plac
             return NULL;
     }
     /* Initialize life bar */
-    updateLifeBarTextElement(&new_tower->life_bar, new_tower->life_points, new_tower->max_life_points);
+    
 
     /* If health is manually set */
     if (life_points !=-1){
         new_tower->life_points = life_points;
     }
-
+    updateLifeBarTextElement(&new_tower->life_bar, new_tower->life_points, new_tower->max_life_points);
     if (!tower_list) return new_tower;
     /* Add the tower to the list of towers */
     if (!(*tower_list)) {
@@ -1852,7 +1864,7 @@ Game *createNewGame(char *level_name) {
     new_game->score = 0;
     new_game->turn_nb = 0;
     new_game->game_phase = PRE_WAVE_PHASE;
-    new_game->level_name = level_name;
+    new_game->level_name = duplicateString(level_name);
     /* Load the waves */
     if (!strcmp(level_name, SURVIVAL_MODE)) {
         /* Survival mode pre-wave, no enemies, only income */
@@ -1870,8 +1882,58 @@ Game *createNewGame(char *level_name) {
 }
 
 /* Load a game from a save file */
-// TODO!
-Game *loadGameFromSave(char *save_file);
+Game *loadGameFromSave(char *save_file){
+    /* Openning text file */
+    char *partial_path = concatString("../assets/saves/", save_file);
+    char *full_path = concatString(partial_path, ".txt");
+    FILE *file = fopen(full_path, "r");
+    free(partial_path);
+    /* Checking if file was open successfully */
+    if (!file) {
+        printf("Save file at \"%s\" not found, creating new save file for player \"%s\"\n", full_path, save_file);
+        free(full_path);
+        return NULL;
+    }
+    Game *new_game = malloc(sizeof(Game));
+    /* Retrieve all informations from the file */
+    char **values; int nb_values;
+    while (readLine(file, &values, &nb_values)) {
+        switch (nb_values) {
+            /* Empty line, ignore it */
+            case 0:
+                break;
+            /*header */
+            case 4:
+                new_game = createNewGame(values[0]);
+                new_game->current_wave_nb = stringToInt(values[1]);
+                new_game->funds = stringToInt(values[2]);
+                new_game->score = stringToInt(values[3]);
+                break;
+            /* add tower and enemy */
+            case 5:
+                if (values[0][0] == 'E'){
+                    addEnemy(&new_game->enemy_list, values[1][0],stringToInt(values[3]), stringToInt(values[2]),stringToInt(values[4]));
+                }
+                else if (values[0][0]=='T'){
+                    addTower(&new_game->tower_list,new_game->enemy_list, values[1][0], stringToInt(values[3]),stringToInt(values[2]),stringToInt(values[4]));
+                }
+                break;
+            /* Invalid value count on line */
+            default:
+                printf("[ERROR]    Invalid syntax for level file \"%s\"\n", full_path);
+                free(full_path);
+                for (int i = 0; i < nb_values; i++) free(values[i]);
+                free(values);
+                fclose(file);
+                return NULL;
+        }
+        for (int i = 0; i < nb_values; i++) free(values[i]);
+        free(values);
+    }
+    free(full_path);
+    fclose(file);
+    return new_game;
+}
 
 /* Load next wave, return true if successfull */
 bool loadNextWave(Game *game) {
@@ -1894,7 +1956,7 @@ void startNextWave(Game *game) {
 }
 
 /* Update game */
-void updateGame(Game *game) {
+void updateGame(Game *game, const char *nickname) {
     /* Update game phase */
     bool condition; Enemy *enemy; Tower *tower;
     switch (game->game_phase) {
@@ -1909,6 +1971,8 @@ void updateGame(Game *game) {
             }
             /* Change phase */
             if (condition) {
+                /* Save game (turn ending) */
+                saveGame(nickname, game);
                 game->game_phase = TOWERS_ATTACKING_PHASE;
                 makeAllTowersAct(game->tower_list, &game->currently_acting_tower);
                 game->currently_acting_tower = game->tower_list;
@@ -1982,6 +2046,7 @@ void destroyGame(Game *game) {
     /* Destroy all waves */
     destroyWaveList(game->waves, game->nb_waves);
     /* Destroy game object */
+    if (game->level_name) free(game->level_name);
     free(game);
 }
 
@@ -2416,6 +2481,14 @@ int main(int argc, char* argv[]) {
     /* Initialize a new random seed */
     srand(time(NULL));
 
+    /* Get username */
+    char nickname[MAX_LENGTH_NICKNAME];
+    printf("Enter nickname: ");
+    fgets(nickname, MAX_LENGTH_NICKNAME, stdin);
+    char *c;
+    if ((c = strchr(nickname, '\r'))) *c = '\0';
+    if ((c = strchr(nickname, '\n'))) *c = '\0';
+
     /* Initialize SDL */
     if (SDL_Init(SDL_INIT_EVERYTHING) != 0) {
         printf("Error initializing SDL: %s\n", SDL_GetError());
@@ -2441,9 +2514,12 @@ int main(int argc, char* argv[]) {
     /* Antialiasing, "0" -> "nearest" ; "1" -> "linear" ; "2" -> "best" */
     SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, ANTI_ALIASING);
 
+    /* Set focus to window */
+    SDL_RaiseWindow(wind);
+
     // [TEMPORARY]
     TextElement *win_text_surface = addTextElement(NULL, "YOU DEFEATED THE SWARM !", 4.0, (SDL_Color) {255, 255, 255, 255}, (SDL_Color) {0, 0, 0, 255}, (SDL_Rect) {0, 0, WINDOW_WIDTH, WINDOW_HEIGHT}, true, false, NULL);
-
+    TextElement *save_text_surface = addTextElement(NULL, "SAVED SUCCESSFULY !", 4.0, (SDL_Color) {255, 255, 255, 255}, (SDL_Color) {0, 0, 0, 255}, (SDL_Rect) {0, 0, WINDOW_WIDTH, WINDOW_HEIGHT}, true, false, NULL);
     /* Load images */
     SDL_Surface *towers[] = {loadImg("towers/Archer_tower"), loadImg("towers/Empty_tower"), loadImg("towers/canon"), loadImg("towers/sorcerer")};
     SDL_Surface *towers_upgrades[] = {loadImg("towers/sorcerer_evolved"), loadImg("towers/canon_evolved"), loadImg("towers/barracks")};
@@ -2460,7 +2536,10 @@ int main(int argc, char* argv[]) {
     addTextElement(&ui_text_element, "", 0.5, (SDL_Color) {0, 0, 0, 0}, (SDL_Color) {0, 0, 0, 0}, (SDL_Rect) {WINDOW_WIDTH*2/3, 0, WINDOW_WIDTH/3, 48}, true, false, NULL);
 
     /* Load game */
-    Game *game = createNewGame(SURVIVAL_MODE);
+    Game *game = loadGameFromSave(nickname);
+    if (!game) game = createNewGame(SURVIVAL_MODE);
+    else printf("Welcome back %s!\n", nickname);
+    saveGame(nickname, game);
 
     /* Main loop */
     Tower *towerOnTile;
@@ -2511,9 +2590,6 @@ int main(int argc, char* argv[]) {
                             break;
                         case SDL_SCANCODE_D:
                             cam_x_speed = +1;
-                            break;
-                        case SDL_SCANCODE_X:
-                            saveGame("save1", game);
                             break;
                         case SDL_SCANCODE_LSHIFT:
                             cam_speed_mult = +1;
@@ -2654,7 +2730,7 @@ int main(int argc, char* argv[]) {
         }
 
         /* Update game */
-        updateGame(game);
+        updateGame(game, nickname);
 
         /* Update UI if needed */
         /* Update score display */
@@ -2759,6 +2835,6 @@ int main(int argc, char* argv[]) {
     SDL_DestroyRenderer(rend);
     SDL_DestroyWindow(wind);
     SDL_Quit();
-    printf("Goodbye!\n");
+    printf("Goodbye %s!\n", nickname);
     return 0;
 }
