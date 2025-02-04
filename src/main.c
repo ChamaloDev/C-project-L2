@@ -31,6 +31,7 @@
 #define ORC_ENEMY 'O'
 #define NECROMANCER_ENEMY 'N'
 #define SKELETON_ENEMY 's'
+#define WITCH_ENEMY 'W'
 /* Tower types */
 #define ARCHER_TOWER 'A'
 #define WALL_TOWER 'W'
@@ -950,8 +951,18 @@ TextElement *addDamageNumber(TextElement **text_element_list, int amount, int co
     char text[16];
     sprintf(text, "-%d", amount);
     /* Colors */
-    SDL_Color main_color = {127, 0, 0, 255};
-    SDL_Color outline_color = {0, 0, 0, 255};
+    SDL_Color main_color, outline_color;
+    /* Display depends on if demage or heal was received */
+    if (amount >= 0) {
+        sprintf(text, "-%d", amount);
+        main_color = (SDL_Color) {127, 0, 0, 255};
+        outline_color = (SDL_Color) {0, 0, 0, 255};
+    }
+    else {
+        sprintf(text, "+%d", -amount);
+        main_color = (SDL_Color) {127, 255, 127, 255};
+        outline_color = (SDL_Color) {255, 255, 255, 255};
+    }
     /* Destination rect */
     SDL_Rect rect = {(collumn-1)*TILE_WIDTH, (row-1)*TILE_HEIGHT, TILE_WIDTH, TILE_HEIGHT};
     /* Damage number animation */
@@ -1067,6 +1078,12 @@ Enemy *addEnemy(Enemy **enemy_list, char enemy_type, int spawn_collumn, int spaw
             new_enemy->base_speed = new_enemy->speed = 3;
             new_enemy->sprite = loadImg("enemies/skeleton");
             new_enemy->score_on_kill = 25;
+            break;
+        case WITCH_ENEMY:
+            new_enemy->max_life_points = new_enemy->life_points = 7;
+            new_enemy->base_speed = new_enemy->speed = 1;
+            new_enemy->sprite = loadImg("enemies/Witch");
+            new_enemy->score_on_kill = 100;
             break;
         default:  /* Unknown enemy type */
             printf("[ERROR]    Unknown enemy type '%c'\n", enemy_type);
@@ -1293,6 +1310,20 @@ void enemyAttack(Enemy *enemy, Tower **tower_list, Enemy **enemy_list, TextEleme
             break;
         case SKELETON_ENEMY:
             if (tower) result = damageTower(tower, 2, tower_list,text_element_list);
+            break;
+        case WITCH_ENEMY:
+            if (tower) result = damageTower(tower, 2, tower_list,text_element_list);
+            /* Area heal and speed boost (except for self) */
+            for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) if (x || y) if (getEnemyAndTowerAt(*enemy_list, NULL, enemy->collumn+x, enemy->row+y, &e, NULL)) {
+                /* Heal */
+                if (e->max_life_points != e->life_points) {
+                    addDamageNumber(text_element_list, - min(3, e->max_life_points - e->life_points), e->collumn, e->row);
+                    e->life_points = min(e->life_points+3, e->max_life_points);
+                    updateLifeBarTextElement(&e->life_bar, e->life_points, e->max_life_points);
+                }
+                /* Speed boost */
+                e->speed += 1;
+            }
             break;
         default:  /* Unknown enemy type */
             printf("[ERROR]    Unknown enemy type '%c'\n", enemy->type);
@@ -2152,6 +2183,11 @@ void beguinNewSurvivalWave(Game *game) {
             enemy_type = ORC_ENEMY;
             wave_power -= 300;
         }
+        /* Add a witch enemy */
+        else if (roll(1.0 - 5000.0/(5000.0 + wave_power))) {
+            enemy_type = WITCH_ENEMY;
+            wave_power -= 200;
+        }
         /* Add a goblin enemy */
         else if (roll(1.0 - 2500.0/(2500.0 + wave_power))) {
             enemy_type = GOBLIN_ENEMY;
@@ -2683,7 +2719,7 @@ int main(int argc, char* argv[]) {
                             break;
                         case SDL_SCANCODE_D:
                             cam_x_speed = +1;
-                        	break;
+                            break;
                         case SDL_SCANCODE_LSHIFT:
                             cam_speed_mult = +1;
                             break;
@@ -2694,7 +2730,7 @@ int main(int argc, char* argv[]) {
                         /* Start the wave */
                         case SDL_SCANCODE_SPACE:
                             if (game->game_phase == PRE_WAVE_PHASE || game->game_phase == WAITING_FOR_USER_PHASE){
-                            	startNextWave(game);
+                                startNextWave(game);
                             }
                             if (game->game_phase == VICTORY_PHASE || game->game_phase == DEFEAT_PHASE) game->game_phase = SCORE_PHASE;
                             
