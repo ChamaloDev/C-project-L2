@@ -2672,6 +2672,17 @@ int main(int argc, char* argv[]) {
     SDL_Surface *castle = loadImg("others/Castle");
     TextElement *scoreboard = NULL;
 
+    /* Tower prices */
+    SDL_Color main_color = {255, 255, 127, 255}, outline_color = {127, 127, 63, 255};
+    TextElement *tower_prices = NULL;
+    addTextElement(&tower_prices, "Archer tower: 50*", 0.5, main_color, outline_color, (SDL_Rect) {BASE_WINDOW_HEIGHT*0/4 + 10, 0, BASE_WINDOW_HEIGHT/4 - 20, FONT_HEIGHT/2}, true, false, NULL);
+    addTextElement(&tower_prices, "Wall tower: 30*", 0.5, main_color, outline_color, (SDL_Rect) {BASE_WINDOW_HEIGHT*1/4 + 10, 0, BASE_WINDOW_HEIGHT/4 - 20, FONT_HEIGHT/2}, true, false, NULL);
+    addTextElement(&tower_prices, "Canon tower: 100*", 0.5, main_color, outline_color, (SDL_Rect) {BASE_WINDOW_HEIGHT*2/4 + 10, 0, BASE_WINDOW_HEIGHT/4 - 20, FONT_HEIGHT/2}, true, false, NULL);
+    addTextElement(&tower_prices, "Wizard tower: 70*", 0.5, main_color, outline_color, (SDL_Rect) {BASE_WINDOW_HEIGHT*3/4 + 10, 0, BASE_WINDOW_HEIGHT/4 - 20, FONT_HEIGHT/2}, true, false, NULL);
+    TextElement *wall_up_price = addTextElement(NULL, "Barrack tower: 70*", 0.5, main_color, outline_color, (SDL_Rect) {10, 0, BASE_WINDOW_HEIGHT/4 - 20, FONT_HEIGHT/2}, true, false, NULL);;
+    TextElement *canon_up_price = addTextElement(NULL, "Destroyer tower: 120*", 0.5, main_color, outline_color, (SDL_Rect) {10, 0, BASE_WINDOW_HEIGHT/4 - 20, FONT_HEIGHT/2}, true, false, NULL);;
+    TextElement *wizard_up_price = addTextElement(NULL, "Archmage tower: 100*", 0.5, main_color, outline_color, (SDL_Rect) {10, 0, BASE_WINDOW_HEIGHT/4 - 20, FONT_HEIGHT/2}, true, false, NULL);;
+
     /* Load UI text */
     TextElement *ui_text_element = NULL;
     /* (1 : top left) Funds */
@@ -2945,19 +2956,25 @@ int main(int argc, char* argv[]) {
         if (!menu_hidden) {
             drawFilledRect(rend, 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT/4, 128, 128, 128, 255);
             drawRect(rend, 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT/4, 255, 255, 255, 255);
-            if (!getEnemyAndTowerAt(NULL, game->tower_list, selected_tile_pos[0], selected_tile_pos[1], NULL, &towerOnTile))
-                for (unsigned long long i = 0; i < sizeof(towers)/sizeof(towers[0]); i++)
-                    drawImgStatic(rend, towers[i], i*WINDOW_HEIGHT/4, 0, WINDOW_HEIGHT/4, WINDOW_HEIGHT/4, NULL);
-            else{
+            /* Base towers */
+            if (!getEnemyAndTowerAt(NULL, game->tower_list, selected_tile_pos[0], selected_tile_pos[1], NULL, &towerOnTile)) {
+                for (unsigned long long i = 0; i < sizeof(towers)/sizeof(towers[0]); i++) drawImgStatic(rend, towers[i], i*WINDOW_HEIGHT/4, 0, WINDOW_HEIGHT/4, WINDOW_HEIGHT/4, NULL);
+                drawTextElements(rend, &tower_prices);
+            }
+            /* Tower upgrade */
+            else {
                 switch (towerOnTile->type){
                     case SORCERER_TOWER:
                         drawImgStatic(rend, towers_upgrades[0], 0, 0, WINDOW_HEIGHT/4, WINDOW_HEIGHT/4, NULL);
+                        drawTextElements(rend, &wizard_up_price);
                         break;
                     case CANON_TOWER:
                         drawImgStatic(rend, towers_upgrades[1], 0, 0, WINDOW_HEIGHT/4, WINDOW_HEIGHT/4, NULL);
+                        drawTextElements(rend, &canon_up_price);
                         break;
                     case WALL_TOWER:
                         drawImgStatic(rend, towers_upgrades[2], 0, 0, WINDOW_HEIGHT/4, WINDOW_HEIGHT/4, NULL);
+                        drawTextElements(rend, &wall_up_price);
                         break;
                     default:
                         break;
@@ -3010,6 +3027,10 @@ int main(int argc, char* argv[]) {
         SDL_Delay(max(1000/FPS - (SDL_GetTicks64()-CURRENT_TICK), 0));
         CURRENT_TICK = SDL_GetTicks64();
     }
+
+    /* Free memory */
+    while (tower_prices) destroyTextElement(tower_prices, &tower_prices);
+    destroyTextElement(wall_up_price, NULL); destroyTextElement(canon_up_price, NULL); destroyTextElement(wizard_up_price, NULL);
     destroyTextElement(win_text_surface, NULL); destroyTextElement(lose_text_surface, NULL);destroyTextElement(protect_castle_surface,NULL); destroyTextElement(wave_coming_surface,NULL);
     delImg(delete_tower); delImg(quit_menu); delImg(background); delImg(castle);
     if (scoreboard) destroyTextElement(scoreboard, NULL);
