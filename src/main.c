@@ -339,7 +339,7 @@ void drawImgDynamic(SDL_Renderer *rend, SDL_Surface *img, int pos_x, int pos_y, 
 void drawRect(SDL_Renderer *rend, int pos_x, int pos_y, int width, int height, int red, int green, int blue, int alpha);
 void drawFilledRect(SDL_Renderer *rend, int pos_x, int pos_y, int width, int height, int red, int green, int blue, int alpha);
 Tower *upgradeTower(Tower **tower_list, Enemy *enemy_list, char tower_type, int placement_collumn, int placement_row, int *funds);
-void SaveScore(const char *actualnickname,int actualscore);
+void SaveScore(const char *actualnickname,int actualscore,char *level_name);
 
 
 
@@ -1855,23 +1855,28 @@ void drawProjectiles(SDL_Renderer *rend, Projectile *projectile_list) {
 }
 
 
-void SaveScore(const char *actualnickname,int actualscore){
-    FILE *file = fopen("../assets/scores/scoreboard.txt", "r");
-    if (!file) {
-    	printf("Error opening scoreboard file");
-    	return;
-	}
+void SaveScore(const char *actualnickname,int actualscore,char *level_name){
+	char *partial_path = concatString("../assets/scores/", level_name);
+    char *full_path = concatString(partial_path, ".txt");
+    FILE *file = fopen(full_path, "r");
+	free(partial_path);
     char **values;int nb_values, i=0;
     Scoreboard Game_scoreboard[MAX_SIZE_SCORE_FILE]; Scoreboard temp;
-    while (readLine(file,&values,&nb_values)){
-    		Game_scoreboard[i].Nickname=duplicateString(values[0]);
-    		Game_scoreboard[i].score=stringToInt(values[1]);
-    		i++;
-            /* Free memory */
-            for (int j = nb_values; j > 0; j--) free(values[j-1]);
-            free(values);
-    }
-    // we add the new player at the end of the scoreboard struct before sorting the array
+    if (file) {
+		while (readLine(file,&values,&nb_values)){
+				Game_scoreboard[i].Nickname=duplicateString(values[0]);
+				Game_scoreboard[i].score=stringToInt(values[1]);
+				i++;
+		        /* Free memory */
+		        for (int j = nb_values; j > 0; j--) free(values[j-1]);
+		        free(values);
+		}
+		fclose(file);
+	}
+	else {
+		printf("No file found, creating new score file for %s \n",level_name);
+	}
+	// we add the new player at the end of the scoreboard struct before sorting the array
     Game_scoreboard[i].Nickname = duplicateString(actualnickname);
     Game_scoreboard[i].score = actualscore; 
     i++;
@@ -1885,10 +1890,12 @@ void SaveScore(const char *actualnickname,int actualscore){
     	}
     	Game_scoreboard[y+1] = temp;
     }
-    fclose(file);
-    FILE *file1 = fopen("../assets/scores/scoreboard.txt", "w");
+    
+    FILE *file1 = fopen(full_path, "w");
     if (!file1) {
-    	printf("Error opening scoreboard file a second time");
+    	printf("Error opening scoreboard file");
+    	free(full_path);
+    	fclose(file1);
     	for (int j=0; j<i-1;j++){
     		free(Game_scoreboard[j].Nickname);
     	}
@@ -1898,6 +1905,7 @@ void SaveScore(const char *actualnickname,int actualscore){
     	fprintf(file1,"%s %d \n", Game_scoreboard[j].Nickname,Game_scoreboard[j].score);
     	free(Game_scoreboard[j].Nickname);
     }
+    free(full_path);
     fclose(file1);
 }
 
@@ -2071,7 +2079,7 @@ void updateGame(Game *game, const char *nickname,int score,bool *score_saved) {
         	//verify if the score as already been saved
         	if (!*score_saved) {
         		*score_saved = true;
-        		SaveScore(nickname,score);
+        		SaveScore(nickname,score,game->level_name);
         	}
         	
             break;
@@ -2619,8 +2627,10 @@ int main(int argc, char* argv[]) {
     /* Load images */
     TextElement *win_text_surface = addTextElement(NULL, "VICTORY!", 4.0, (SDL_Color) {255, 255, 255, 255}, (SDL_Color) {0, 0, 0, 255}, (SDL_Rect) {0, 0, WINDOW_WIDTH, WINDOW_HEIGHT}, true, false, NULL);
     TextElement *lose_text_surface = addTextElement(NULL, "DEFEAT...", 4.0, (SDL_Color) {127, 0, 0, 255}, (SDL_Color) {0, 0, 0, 255}, (SDL_Rect) {0, 0, WINDOW_WIDTH, WINDOW_HEIGHT}, true, false, NULL);
+    TextElement *loser_text_surface = addTextElement(NULL, "Press ESC to quit. Your score will be saved :D", 1.0, (SDL_Color) {127, 0, 0, 255}, (SDL_Color) {0, 0, 0, 255}, (SDL_Rect) {WINDOW_WIDTH/3, WINDOW_HEIGHT-400, 500, 300}, true, false, NULL);
     TextElement *protect_castle_surface = addTextElement(NULL, "PROTECT THE CASTLE ! BUILD YOUR DEFENSES !!", 1.0, (SDL_Color) {255, 255, 255, 255}, (SDL_Color) {155, 155, 155, 255}, (SDL_Rect) {WINDOW_WIDTH/3, 600, WINDOW_WIDTH/2, WINDOW_HEIGHT-600}, true, false, NULL);
     TextElement *wave_coming_surface = addTextElement(NULL, "ENNEMIES ARE COMING ! GET COVER !", 1.0, (SDL_Color) {255, 255, 255, 255}, (SDL_Color) {155, 155, 155, 255}, (SDL_Rect) {50, 600, WINDOW_WIDTH/2, WINDOW_HEIGHT-600}, true, false, NULL);
+    
     SDL_Surface *towers[] = {loadImg("towers/Archer_tower"), loadImg("towers/Empty_tower"), loadImg("towers/canon"), loadImg("towers/sorcerer")};
     SDL_Surface *towers_upgrades[] = {loadImg("towers/sorcerer_evolved"), loadImg("towers/canon_evolved"), loadImg("towers/barracks")};
     SDL_Surface *grass_tiles[] = {loadImg("others/grass_tile_a"), loadImg("others/grass_tile_b"), loadImg("others/grass_tile_c"), loadImg("others/grass_tile_d"), loadImg("others/grass_tile_alt_a"), loadImg("others/grass_tile_alt_b"), loadImg("others/grass_tile_alt_c"), loadImg("others/grass_tile_alt_d")};
@@ -2924,11 +2934,15 @@ int main(int argc, char* argv[]) {
         drawTextElements(rend, &ui_text_element);
         /* Draw victory/defeat text */
         if (game->game_phase == VICTORY_PHASE) drawTextElements(rend, &win_text_surface);
-        else if (game->game_phase == DEFEAT_PHASE) drawTextElements(rend, &lose_text_surface);
+        else if (game->game_phase == DEFEAT_PHASE) {
+        	drawTextElements(rend, &lose_text_surface);
+        	drawTextElements(rend,&loser_text_surface);
+        }
 		else if (game->game_phase == PRE_WAVE_PHASE) drawTextElements(rend,&protect_castle_surface);
 		else {
-			drawTextElements(rend,&wave_coming_surface);
+		drawTextElements(rend,&wave_coming_surface);
 		}
+	
         /* Draw to window and loop */
         SDL_RenderPresent(rend);
         SDL_Delay(max(1000/FPS - (SDL_GetTicks64()-CURRENT_TICK), 0));
