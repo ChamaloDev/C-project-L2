@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include <time.h>
 #include <SDL.h>
+#include <dirent.h>
 #define FULLSCREEN false   // Set if the game should start on fullscreen (F11 to toggle on/off)
 #define ANTI_ALIASING "2"  // Set if the game should use anti aliasing for rendering
 #define FPS 60             // Game target FPS
@@ -142,6 +143,7 @@
 #define char_right_bracket ')'
 #define char_heart '&'
 #define char_coin '*'
+
 
 
 
@@ -396,7 +398,7 @@ char *duplicateString(const char *a) {
 /* Convert a string to an int */
 int stringToInt(const char *str) {
     int n = 0;
-    if (!sscanf(str, " %d", &n)) printf("[ERROR]    Could not read an integer in string \"%s\"\n", str);
+    sscanf(str, " %d", &n);
     return n;
 }
 
@@ -2426,6 +2428,8 @@ int main(int argc, char* argv[]) {
     /* Initialize a new random seed */
     srand(time(NULL));
 
+
+    /* Part in terminal */
     /* Get username */
     char nickname[MAX_LENGTH_NICKNAME];
     printf("Enter nickname: ");
@@ -2434,6 +2438,75 @@ int main(int argc, char* argv[]) {
     if ((c = strchr(nickname, '\r'))) *c = '\0';
     if ((c = strchr(nickname, '\n'))) *c = '\0';
 
+    /* Getting all availible levels (up to 64) */
+    char *availible_levels[64] = {NULL}; int nb_availible_levels = 0;
+    DIR *d; struct dirent *dir;
+    d = opendir("../assets/lvl/");
+    if (d) {
+        printf("Availible levels:\n");
+        /* List level names */
+        while ((dir = readdir(d)) != NULL) {
+            /* Ignores "." et ".." repertories, as we do not need them */
+            if (!strcmp(dir->d_name, ".") || !strcmp(dir->d_name, "..")) continue;
+            availible_levels[nb_availible_levels] = duplicateString(dir->d_name);
+            /* Remove the .txt part of the name */
+            if ((c = strchr(availible_levels[nb_availible_levels], '.'))) *c = '\0';
+            printf("  %2d) %s\n", nb_availible_levels+1, availible_levels[nb_availible_levels]);
+            nb_availible_levels++;
+        }
+        closedir(d);
+    }
+    else {
+        printf("[ERROR]    Unable to get availible levels name\n");
+    }
+
+    /* Getting additionnal levels (special levels and save file) */
+    printf("Additionnal levels:\n");
+    printf("  %2d) Survival mode\n", nb_availible_levels+1);
+    char *save_path = malloc(64 * sizeof(char)); sprintf(save_path, "../assets/saves/%s.txt", nickname);
+    FILE *save_file;
+    bool save_availible = false;
+    if ((save_file = fopen(save_path, "r"))) {
+        fclose(save_file);
+        printf("  %2d) Load save\n", nb_availible_levels+2);
+        save_availible = true;
+    }
+    free(save_path);
+
+    /* Allow user to chose which level they want to play */
+    Game *game = NULL;
+    while (!game) {
+        char buffer[64];
+        printf("Please chose a level by entering its numerical ID or its name\n");
+        printf("Enter \"quit\" / \"exit\" / \"\" to exit program\n");
+        printf(">>> ");
+        fgets(buffer, 64, stdin);
+        /* Remove line break */
+        if ((c = strchr(buffer, '\r'))) *c = '\0';
+        if ((c = strchr(buffer, '\n'))) *c = '\0';
+        /* Exit program */
+        if (!strcmp(buffer, "quit") || !strcmp(buffer, "exit") || !strcmp(buffer, "")) return 0;
+        /* Load a level by entering its name */
+        for (int i = 0; i < nb_availible_levels; i++) if (!strcmp(buffer, availible_levels[i])) {
+            game = createNewGame(buffer);
+            break;
+        }
+        /* Load a level by entering its numerical ID */
+        if (!game) if (0 < stringToInt(buffer) && stringToInt(buffer) <= nb_availible_levels)
+            game = createNewGame(availible_levels[stringToInt(buffer)]);
+        /* Load survival mode */
+        if (!game) if (!strcmp(buffer, "Survival mode") || stringToInt(buffer) == nb_availible_levels+1)
+            game = createNewGame(SURVIVAL_MODE);
+        /* Load savefile */
+        if (!game) if (save_availible && (!strcmp(buffer, "Load save") || stringToInt(buffer) == nb_availible_levels+2))
+            game = loadGameFromSave(nickname);
+        /* Error */
+        if (!game) printf("Could not find level \"%s\", please try again\n", buffer);
+    }
+    printf("Level loaded successfully, have fun!\n");
+
+
+    /* Graphic part */
     /* Initialize SDL */
     if (SDL_Init(SDL_INIT_EVERYTHING) != 0) {
         printf("Error initializing SDL: %s\n", SDL_GetError());
@@ -2481,12 +2554,6 @@ int main(int argc, char* argv[]) {
     addTextElement(&ui_text_element, "", 0.5, (SDL_Color) {0, 0, 0, 0}, (SDL_Color) {0, 0, 0, 0}, (SDL_Rect) {WINDOW_WIDTH/3, 0, WINDOW_WIDTH/3, 48}, true, false, NULL);
     /* (3 : top right) Score */
     addTextElement(&ui_text_element, "", 0.5, (SDL_Color) {0, 0, 0, 0}, (SDL_Color) {0, 0, 0, 0}, (SDL_Rect) {WINDOW_WIDTH*2/3, 0, WINDOW_WIDTH/3, 48}, true, false, NULL);
-
-    /* Load game */
-    Game *game = loadGameFromSave(nickname);
-    if (!game) game = createNewGame("level_test");
-    else printf("Welcome back %s!\n", nickname);
-    saveGame(nickname, game);
 
     /* Main loop */
     Tower *towerOnTile;
