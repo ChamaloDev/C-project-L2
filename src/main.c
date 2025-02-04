@@ -45,6 +45,7 @@
 #define PROJECTILE_ANIMATION 'P'
 #define DAMAGE_NUMBER_ANIMATION 'd'
 /* Game phases */
+#define WAITING_FOR_USER_PHASE -1
 #define PRE_WAVE_PHASE 0
 #define ENEMIES_MOVING_PHASE 1
 #define TOWERS_ATTACKING_PHASE 2
@@ -1890,45 +1891,43 @@ Game *loadGameFromSave(char *save_file){
     free(partial_path);
     /* Checking if file was open successfully */
     if (!file) {
-        printf("Save file at \"%s\" not found, creating new save file for player \"%s\"\n", full_path, save_file);
+        printf("Save file at \"%s\" not found, creating new save file for player %s\n", full_path, save_file);
         free(full_path);
         return NULL;
     }
-    Game *new_game = malloc(sizeof(Game));
+    Game *new_game = NULL;
     /* Retrieve all informations from the file */
     char **values; int nb_values;
     while (readLine(file, &values, &nb_values)) {
-        switch (nb_values) {
-            /* Empty line, ignore it */
-            case 0:
-                break;
-            /*header */
-            case 4:
+        if (nb_values == 5) {
+            /* Header line */
+            if (!new_game) {
                 new_game = createNewGame(values[0]);
                 new_game->current_wave_nb = stringToInt(values[1]);
                 new_game->funds = stringToInt(values[2]);
                 new_game->score = stringToInt(values[3]);
-                break;
-            /* add tower and enemy */
-            case 5:
-                if (values[0][0] == 'E'){
-                    addEnemy(&new_game->enemy_list, values[1][0],stringToInt(values[3]), stringToInt(values[2]),stringToInt(values[4]));
-                }
-                else if (values[0][0]=='T'){
-                    addTower(&new_game->tower_list,new_game->enemy_list, values[1][0], stringToInt(values[3]),stringToInt(values[2]),stringToInt(values[4]));
-                }
-                break;
-            /* Invalid value count on line */
-            default:
-                printf("[ERROR]    Invalid syntax for level file \"%s\"\n", full_path);
-                free(full_path);
-                for (int i = 0; i < nb_values; i++) free(values[i]);
-                free(values);
-                fclose(file);
-                return NULL;
+                new_game->game_phase = (stringToInt(values[4]) ? PRE_WAVE_PHASE : WAITING_FOR_USER_PHASE);
+                /* Remove any enemy loaded with the level, as they will instead be loaded from this save file and not from the level file */
+                while (new_game->enemy_list) destroyEnemy(new_game->enemy_list, &new_game->enemy_list);
+                continue;
+            }
+            /* Enemy or torwer to add */
+            else {
+                if (values[0][0] == 'E') addEnemy(&new_game->enemy_list, values[1][0], stringToInt(values[3]), stringToInt(values[2]), stringToInt(values[4]));
+                else if (values[0][0] == 'T') addTower(&new_game->tower_list,new_game->enemy_list, values[1][0], stringToInt(values[3]), stringToInt(values[2]), stringToInt(values[4]));
+            }
+            /* Free memory */
+            for (int i = nb_values; i > 0; i--) free(values[i-1]);
+            free(values);
         }
-        for (int i = 0; i < nb_values; i++) free(values[i]);
-        free(values);
+        else if (nb_values) {
+            printf("[ERROR]    Invalid syntax for level file \"%s\"\n", full_path);
+            free(full_path);
+            for (int i = 0; i < nb_values; i++) free(values[i]);
+            free(values);
+            fclose(file);
+            return NULL;
+        }
     }
     free(full_path);
     fclose(file);
@@ -1960,6 +1959,8 @@ void updateGame(Game *game, const char *nickname) {
     /* Update game phase */
     bool condition; Enemy *enemy; Tower *tower;
     switch (game->game_phase) {
+        case WAITING_FOR_USER_PHASE:
+            break;
         case PRE_WAVE_PHASE:
             saveGame(nickname, game);
             break;
@@ -2166,11 +2167,8 @@ bool readValue(char **line, char **value) {
 /* Read single file line */
 bool readLine(FILE *file, char ***values, int *nb_values) {
     /* Get the full line */
-    char *line_buffer = malloc(256 * sizeof(char));
-    if (!fgets(line_buffer, 256, file)) {
-        free(line_buffer);
-        return false;
-    }
+    char line_buffer[64];
+    if (!fgets(line_buffer, 64, file)) return false;
     /* Split it into all of its individual values */
     *values = malloc(sizeof(char *)); *nb_values = 0; char *value, *line = line_buffer;
     while (readValue(&line, &value)) {
@@ -2248,7 +2246,7 @@ bool saveGame(const char *save_name, Game *game){
         return false;
     }
     /* Write the header with all keys infos that need to be saved and used when charging the save */
-    fprintf(file,"%s %d %d %d \n", game->level_name, game->current_wave_nb, game->funds, game->score);
+    fprintf(file,"%s %d %d %d %d\n", game->level_name, game->current_wave_nb, game->funds, game->score, game->game_phase == PRE_WAVE_PHASE);
     /* Add all the tower and the enemy file with all their characteristics */
     Tower *current_tower = game->tower_list;
     while(current_tower) {
@@ -2259,60 +2257,6 @@ bool saveGame(const char *save_name, Game *game){
     while(current_enemy){
         fprintf(file, "E %c %d %d %d\n", current_enemy->type, current_enemy->row, current_enemy->collumn, current_enemy->life_points);
         current_enemy = current_enemy->next;
-    }
-    free(full_path);
-    fclose(file);
-    return true;
-}
-
-bool loadSave(const char *save, Enemy **enemy_list, Tower **tower_list, char *level_name, int *funds, int *actual_wave, int *score) {
-    /* Openning text file */
-    char *partial_path = concatString("../assets/saves/", save);
-    char *full_path = concatString(partial_path, ".txt");
-    FILE *file = fopen(full_path, "r");
-    free(partial_path);
-    /* Checking if file was open successfully */
-    if (!file) {
-        printf("[ERROR]    Level file at \"%s\" not found\n", full_path);
-        free(full_path);
-        return false;
-    }
-
-    /* Retrieve all informations from the file */
-    char **values; int nb_values;
-    while (readLine(file, &values, &nb_values)) {
-        switch (nb_values) {
-            /* Empty line, ignore it */
-            case 0:
-                break;
-            /*header */
-            case 4:
-                level_name = malloc(strlen(values[0]) + 1);
-                   strcpy(level_name, values[0]);
-                   *actual_wave = stringToInt(values[1]);
-                   *funds = stringToInt(values[2]);
-                   *score = stringToInt(values[3]);
-                break;
-            /* add tower and enemy */
-            case 5:
-                if (!strcmp(values[0], "E")) {
-                    addEnemy(enemy_list, stringToInt(values[1]), stringToInt(values[2]), stringToInt(values[3]), stringToInt(values[4]));
-                }
-                else if (!strcmp(values[0],"T")){
-                    addTower(tower_list, *enemy_list, stringToInt(values[1]), stringToInt(values[2]), stringToInt(values[3]), stringToInt(values[4]));
-                }
-                break;
-            /* Invalid value count on line */
-            default:
-                printf("[ERROR]    Invalid syntax for level file \"%s\"\n", full_path);
-                free(full_path);
-                for (int i = 0; i < nb_values; i++) free(values[i]);
-                free(values);
-                fclose(file);
-                return false;
-        }
-        for (int i = 0; i < nb_values; i++) free(values[i]);
-        free(values);
     }
     free(full_path);
     fclose(file);
@@ -2538,7 +2482,7 @@ int main(int argc, char* argv[]) {
 
     /* Load game */
     Game *game = loadGameFromSave(nickname);
-    if (!game) game = createNewGame(SURVIVAL_MODE);
+    if (!game) game = createNewGame("level_test");
     else printf("Welcome back %s!\n", nickname);
     saveGame(nickname, game);
 
@@ -2600,7 +2544,7 @@ int main(int argc, char* argv[]) {
                             break;
                         /* Start the wave */
                         case SDL_SCANCODE_SPACE:
-                            if (game->game_phase == PRE_WAVE_PHASE) startNextWave(game);
+                            if (game->game_phase == PRE_WAVE_PHASE || game->game_phase == WAITING_FOR_USER_PHASE) startNextWave(game);
                             break;
                         default:
                             break;
