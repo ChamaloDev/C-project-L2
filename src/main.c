@@ -5,18 +5,20 @@
 #include <time.h>
 #include <SDL.h>
 #include <dirent.h>
-#define FULLSCREEN false   // Set if the game should start on fullscreen (F11 to toggle on/off)
-#define ANTI_ALIASING "2"  // Set if the game should use anti aliasing for rendering
-#define FPS 60             // Game target FPS
-#define NB_ROWS 7          // Number of rows for the map
-#define NB_COLLUMNS 15     // Number of collumns for the map
-#define TILE_WIDTH 256     // Width of a tile in px
-#define TILE_HEIGHT 192    // Height of a tile in px
-#define SPRITE_SIZE 320    // Height and width of all sprites in px
-#define BASE_CAM_SPEED 10  // Default camera speed when moving using WASD
-#define CAM_SPEED_MULT 3   // Camera speed multiplier when using lShift or lCtrl
-#define FONT_WIDTH 32      // Width of the custom font in px
-#define FONT_HEIGHT 48     // Height of the custom font in px
+#define FULLSCREEN false        // Set if the game should start on fullscreen (F11 to toggle on/off)
+#define ANTI_ALIASING "2"       // Set if the game should use anti aliasing for rendering
+#define FPS 60                  // Game target FPS
+#define NB_ROWS 7               // Number of rows for the map
+#define NB_COLLUMNS 15          // Number of collumns for the map
+#define TILE_WIDTH 256          // Width of a tile in px
+#define TILE_HEIGHT 192         // Height of a tile in px
+#define SPRITE_SIZE 320         // Height and width of all sprites in px
+#define BASE_CAM_SPEED 10       // Default camera speed when moving using WASD
+#define CAM_SPEED_MULT 3        // Camera speed multiplier when using lShift or lCtrl
+#define FONT_WIDTH 32           // Width of the custom font in px
+#define FONT_HEIGHT 48          // Height of the custom font in px
+#define BASE_WINDOW_WIDTH 1280  // Default width of the window
+#define BASE_WINDOW_HEIGHT 720  // Default width of the window
 
 #define MAX_LENGTH_TOWER_NAME 32
 #define MAX_LENGTH_NICKNAME 32
@@ -52,7 +54,7 @@
 #define TOWERS_ATTACKING_PHASE 2
 #define ENEMIES_ATTACKING_PHASE 3
 #define VICTORY_PHASE 4
-#define GAME_OVER_PHASE 5
+#define DEFEAT_PHASE 5
 
 
 
@@ -148,8 +150,8 @@
 
 
 /* Window's dimensions */
-int WINDOW_WIDTH = 1280;
-int WINDOW_HEIGHT = 720;
+int WINDOW_WIDTH = BASE_WINDOW_WIDTH;
+int WINDOW_HEIGHT = BASE_WINDOW_HEIGHT;
 
 /* Data of the camera */
 double CAM_SCALE = 0.325;
@@ -319,6 +321,8 @@ bool isWhitespace(char c);
 bool readValue(char **line, char **value);
 bool readLine(FILE *file, char ***values, int *nb_values);
 bool loadLevel(const char *path, Wave ***waves, int *nb_waves);
+bool saveGame(const char *save_name, Game *game);
+bool deleteSaveFile(const char *name);
 SDL_Surface *loadImg(const char *path);
 void delImg(SDL_Surface *img);
 void drawEnemiesAndTowers(SDL_Renderer *rend, Enemy *enemy_list, Tower *tower_list, int game_phase);
@@ -332,7 +336,6 @@ void drawRect(SDL_Renderer *rend, int pos_x, int pos_y, int width, int height, i
 void drawFilledRect(SDL_Renderer *rend, int pos_x, int pos_y, int width, int height, int red, int green, int blue, int alpha);
 
 Tower *upgradeTower(Tower **tower_list, Enemy *enemy_list, char tower_type, int placement_collumn, int placement_row, int *funds);
-bool saveGame(const char *save_name, Game *game);
 
 
 
@@ -930,8 +933,9 @@ void drawTextElements(SDL_Renderer *rend, TextElement **text_element_list) {
             y += (current->rect.h - h)/2;
         }
         /* Drawing text element */
+        double window_scaling = WINDOW_WIDTH / ((double) BASE_WINDOW_WIDTH);
         if (current->dynamic_pos) drawImgDynamic(rend, current->sprite, x, y, w, h, current->anim);
-        else drawImgStatic(rend, current->sprite, x, y, w, h, current->anim);
+        else drawImgStatic(rend, current->sprite, x*window_scaling, y*window_scaling, w*window_scaling, h*window_scaling, current->anim);
         current = current->next;
     }
 }
@@ -1958,8 +1962,8 @@ void startNextWave(Game *game) {
 
 /* Update game */
 void updateGame(Game *game, const char *nickname) {
-    /* Update game phase */
     bool condition; Enemy *enemy; Tower *tower;
+    /* Update game phase */
     switch (game->game_phase) {
         case WAITING_FOR_USER_PHASE:
             break;
@@ -2015,13 +2019,12 @@ void updateGame(Game *game, const char *nickname) {
             break;
         case VICTORY_PHASE:
             break;
-        case GAME_OVER_PHASE:
+        case DEFEAT_PHASE:
             break;
         default:
             break;
     }
-    /* Defeat condition */
-    // TODO!
+
     /* On wave defeated */
     if (!game->enemy_list && game->game_phase != PRE_WAVE_PHASE) {
         /* If currently on survival mode */
@@ -2029,8 +2032,25 @@ void updateGame(Game *game, const char *nickname) {
         /* If defeated a wave */
         else if (game->current_wave_nb < game->nb_waves) loadNextWave(game);
         /* If defeated last wave (victory) */
-        else game->game_phase = VICTORY_PHASE;
+        else {
+            game->game_phase = VICTORY_PHASE;
+            /* Delete save file */
+            deleteSaveFile(nickname);
+        }
     }
+
+    /* Defeat condition (an enemy has reached the castle) */
+    enemy = game->enemy_list;
+    while (enemy) {
+        if (enemy->collumn <= 0) {
+            game->game_phase = DEFEAT_PHASE;
+            /* Delete save file */
+            deleteSaveFile(nickname);
+            break;
+        }
+        enemy = enemy->next;
+    }
+
     /* Update all game entities */
     updateProjectiles(&game->projectile_list, &game->enemy_list, game->tower_list, &game->text_element_list, &game->score);
     updateEnemies(&game->currently_acting_enemy, &game->enemy_list, &game->tower_list, &game->text_element_list);
@@ -2265,6 +2285,11 @@ bool saveGame(const char *save_name, Game *game){
     return true;
 }
 
+/* Delete save file */
+bool deleteSaveFile(const char *name) {
+    char save_path[64]; sprintf(save_path, "../assets/saves/%s.txt", name);
+    return remove(save_path);
+}
 
 
 
@@ -2463,7 +2488,7 @@ int main(int argc, char* argv[]) {
     /* Getting additionnal levels (special levels and save file) */
     printf("Additionnal levels:\n");
     printf("  %2d) Survival mode\n", nb_availible_levels+1);
-    char *save_path = malloc(64 * sizeof(char)); sprintf(save_path, "../assets/saves/%s.txt", nickname);
+    char save_path[64]; sprintf(save_path, "../assets/saves/%s.txt", nickname);
     FILE *save_file;
     bool save_availible = false;
     if ((save_file = fopen(save_path, "r"))) {
@@ -2471,7 +2496,6 @@ int main(int argc, char* argv[]) {
         printf("  %2d) Load save\n", nb_availible_levels+2);
         save_availible = true;
     }
-    free(save_path);
 
     /* Allow user to chose which level they want to play */
     Game *game = NULL;
@@ -2537,10 +2561,9 @@ int main(int argc, char* argv[]) {
     /* Set focus to window */
     SDL_RaiseWindow(wind);
 
-    // [TEMPORARY]
-    TextElement *win_text_surface = addTextElement(NULL, "YOU DEFEATED THE SWARM !", 4.0, (SDL_Color) {255, 255, 255, 255}, (SDL_Color) {0, 0, 0, 255}, (SDL_Rect) {0, 0, WINDOW_WIDTH, WINDOW_HEIGHT}, true, false, NULL);
-    TextElement *save_text_surface = addTextElement(NULL, "SAVED SUCCESSFULY !", 4.0, (SDL_Color) {255, 255, 255, 255}, (SDL_Color) {0, 0, 0, 255}, (SDL_Rect) {0, 0, WINDOW_WIDTH, WINDOW_HEIGHT}, true, false, NULL);
     /* Load images */
+    TextElement *win_text_surface = addTextElement(NULL, "VICTORY!", 4.0, (SDL_Color) {255, 255, 255, 255}, (SDL_Color) {0, 0, 0, 255}, (SDL_Rect) {0, 0, WINDOW_WIDTH, WINDOW_HEIGHT}, true, false, NULL);
+    TextElement *lose_text_surface = addTextElement(NULL, "DEFEAT...", 4.0, (SDL_Color) {127, 0, 0, 255}, (SDL_Color) {0, 0, 0, 255}, (SDL_Rect) {0, 0, WINDOW_WIDTH, WINDOW_HEIGHT}, true, false, NULL);
     SDL_Surface *towers[] = {loadImg("towers/Archer_tower"), loadImg("towers/Empty_tower"), loadImg("towers/canon"), loadImg("towers/sorcerer")};
     SDL_Surface *towers_upgrades[] = {loadImg("towers/sorcerer_evolved"), loadImg("towers/canon_evolved"), loadImg("towers/barracks")};
     SDL_Surface *grass_tiles[] = {loadImg("others/grass_tile_a"), loadImg("others/grass_tile_b"), loadImg("others/grass_tile_c"), loadImg("others/grass_tile_d"), loadImg("others/grass_tile_alt_a"), loadImg("others/grass_tile_alt_b"), loadImg("others/grass_tile_alt_c"), loadImg("others/grass_tile_alt_d")};
@@ -2838,8 +2861,11 @@ int main(int argc, char* argv[]) {
         }
 
         /* Draw text UI (lower display if menu is openned) */
-        ui_text_element->rect.y = ui_text_element->next->rect.y = ui_text_element->next->next->rect.y = !menu_hidden * WINDOW_HEIGHT/4;
+        ui_text_element->rect.y = ui_text_element->next->rect.y = ui_text_element->next->next->rect.y = !menu_hidden * BASE_WINDOW_HEIGHT/4;
         drawTextElements(rend, &ui_text_element);
+        /* Draw victory/defeat text */
+        if (game->game_phase == VICTORY_PHASE) drawTextElements(rend, &win_text_surface);
+        else if (game->game_phase == DEFEAT_PHASE) drawTextElements(rend, &lose_text_surface);
 
         /* Draw to window and loop */
         SDL_RenderPresent(rend);
@@ -2848,6 +2874,7 @@ int main(int argc, char* argv[]) {
     }
 
     /* Free allocated memory */
+    destroyTextElement(win_text_surface, NULL); destroyTextElement(lose_text_surface, NULL);
     delImg(delete_tower); delImg(quit_menu); delImg(background); delImg(castle);
     for (int i = 4; i > 0; i--) delImg(towers[i-1]);
     for (int i = 8; i > 0; i--) delImg(grass_tiles[i-1]);
