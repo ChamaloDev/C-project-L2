@@ -2132,7 +2132,7 @@ void updateGame(Game *game, const char *nickname) {
 
     /* Defeat condition (an enemy has reached the castle) */
     enemy = game->enemy_list;
-    while (enemy) {
+    if (game->game_phase != DEFEAT_PHASE) while (enemy) {
         if (enemy->collumn <= 0) {
             game->game_phase = DEFEAT_PHASE;
             /* Save score */
