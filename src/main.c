@@ -2718,7 +2718,9 @@ int main(int argc, char* argv[]) {
         /* Draw background */
         drawImgStatic(rend, background, 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT, NULL);
         /* Draw castle (element to defend from enemies) */
-        drawImgDynamic(rend, castle, -NB_ROWS*TILE_HEIGHT, 0, NB_ROWS*TILE_HEIGHT, NB_ROWS*TILE_HEIGHT, NULL);
+        for (int y = 0; y < NB_ROWS; y++) for (int x = -NB_ROWS * TILE_HEIGHT/TILE_WIDTH + 1; x < 0; x++)
+            drawImgDynamic(rend, grass_tiles[4 + positive_mod(x, 2) + positive_mod(y, 2) * 2], TILE_WIDTH * x, TILE_HEIGHT * y, SPRITE_SIZE, SPRITE_SIZE, NULL);
+        drawImgDynamic(rend, castle, -(NB_ROWS-2)*TILE_HEIGHT, TILE_HEIGHT, (NB_ROWS-2)*TILE_HEIGHT, (NB_ROWS-2)*TILE_HEIGHT, NULL);
         /* Draw grass tiles */
         for (int y = 0; y < NB_ROWS; y++) for (int x = 0; x < NB_COLLUMNS; x++) 
             drawImgDynamic(rend, grass_tiles[x%2 + (y%2) * 2], TILE_WIDTH * x, TILE_HEIGHT * y, SPRITE_SIZE, SPRITE_SIZE, NULL);
