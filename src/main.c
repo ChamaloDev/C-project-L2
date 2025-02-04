@@ -2107,10 +2107,16 @@ void updateGame(Game *game, const char *nickname) {
         /* If currently on survival mode */
         if (!strcmp(game->level_name, SURVIVAL_MODE)) beguinNewSurvivalWave(game);
         /* If defeated a wave */
-        else if (game->current_wave_nb < game->nb_waves) loadNextWave(game);
+        else if (game->current_wave_nb < game->nb_waves) {
+            /* Gain interest on money saved each wave */
+            game->funds *= 1.2;
+            loadNextWave(game);
+        }
         /* If defeated last wave (victory) */
         else if (game->game_phase != VICTORY_PHASE) {
             game->game_phase = VICTORY_PHASE;
+            /* 1G = 1 point */
+            game->score += game->funds;
             /* Save score */
             saveScore(nickname, game->score, game->level_name);
             /* Delete save file */
@@ -3004,7 +3010,7 @@ int main(int argc, char* argv[]) {
     for (int i = 4; i > 0; i--) delImg(towers[i-1]);
     for (int i = 8; i > 0; i--) delImg(grass_tiles[i-1]);
     for (int i = 3; i > 0; i--) delImg(towers_upgrades[i-1]);
-    free(selected_tile_pos);
+    free(selected_tile_pos); delImg(highlighted_tile);
     while (ui_text_element) destroyTextElement(ui_text_element, &ui_text_element);
     destroyGame(game);
     /* Release resources */
