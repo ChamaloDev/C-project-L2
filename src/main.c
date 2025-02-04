@@ -23,6 +23,7 @@
 #define MAX_LENGTH_TOWER_NAME 32
 #define MAX_LENGTH_NICKNAME 32
 #define MAX_SIZE_SCORE_FILE 100
+#define MAX_SIZE_LINE_SCORE_FILE 46
 /* Enemy types */
 #define SLIME_ENEMY 'S'
 #define GELLY_ENEMY 'G'
@@ -30,7 +31,6 @@
 #define ORC_ENEMY 'O'
 #define NECROMANCER_ENEMY 'N'
 #define SKELETON_ENEMY 's'
-#define WITCH_ENEMY 'W'
 /* Tower types */
 #define ARCHER_TOWER 'A'
 #define WALL_TOWER 'W'
@@ -56,6 +56,7 @@
 #define ENEMIES_ATTACKING_PHASE 3
 #define VICTORY_PHASE 4
 #define DEFEAT_PHASE 5
+#define SCORE_PHASE 6
 
 
 
@@ -948,19 +949,10 @@ void drawTextElements(SDL_Renderer *rend, TextElement **text_element_list) {
 TextElement *addDamageNumber(TextElement **text_element_list, int amount, int collumn, int row) {
     /* Text value */
     char text[16];
+    sprintf(text, "-%d", amount);
     /* Colors */
-    SDL_Color main_color, outline_color;
-    /* Display depends on if demage or heal was received */
-    if (amount >= 0) {
-        sprintf(text, "-%d", amount);
-        main_color = (SDL_Color) {127, 0, 0, 255};
-        outline_color = (SDL_Color) {0, 0, 0, 255};
-    }
-    else {
-        sprintf(text, "+%d", -amount);
-        main_color = (SDL_Color) {127, 255, 127, 255};
-        outline_color = (SDL_Color) {255, 255, 255, 255};
-    }
+    SDL_Color main_color = {127, 0, 0, 255};
+    SDL_Color outline_color = {0, 0, 0, 255};
     /* Destination rect */
     SDL_Rect rect = {(collumn-1)*TILE_WIDTH, (row-1)*TILE_HEIGHT, TILE_WIDTH, TILE_HEIGHT};
     /* Damage number animation */
@@ -1076,12 +1068,6 @@ Enemy *addEnemy(Enemy **enemy_list, char enemy_type, int spawn_collumn, int spaw
             new_enemy->base_speed = new_enemy->speed = 3;
             new_enemy->sprite = loadImg("enemies/skeleton");
             new_enemy->score_on_kill = 25;
-            break;
-        case WITCH_ENEMY:
-            new_enemy->max_life_points = new_enemy->life_points = 7;
-            new_enemy->base_speed = new_enemy->speed = 1;
-            new_enemy->sprite = loadImg("enemies/Witch");
-            new_enemy->score_on_kill = 100;
             break;
         default:  /* Unknown enemy type */
             printf("[ERROR]    Unknown enemy type '%c'\n", enemy_type);
@@ -1308,20 +1294,6 @@ void enemyAttack(Enemy *enemy, Tower **tower_list, Enemy **enemy_list, TextEleme
             break;
         case SKELETON_ENEMY:
             if (tower) result = damageTower(tower, 2, tower_list,text_element_list);
-            break;
-        case WITCH_ENEMY:
-            if (tower) result = damageTower(tower, 2, tower_list,text_element_list);
-            /* Area heal and speed boost (except for self) */
-            for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) if (x || y) if (getEnemyAndTowerAt(*enemy_list, NULL, enemy->collumn+x, enemy->row+y, &e, NULL)) {
-                /* Heal */
-                if (e->max_life_points != e->life_points) {
-                    addDamageNumber(text_element_list, - min(3, e->max_life_points - e->life_points), e->collumn, e->row);
-                    e->life_points = min(e->life_points+3, e->max_life_points);
-                    updateLifeBarTextElement(&e->life_bar, e->life_points, e->max_life_points);
-                }
-                /* Speed boost */
-                e->speed += 1;
-            }
             break;
         default:  /* Unknown enemy type */
             printf("[ERROR]    Unknown enemy type '%c'\n", enemy->type);
@@ -1939,6 +1911,26 @@ void SaveScore(const char *actualnickname,int actualscore,char *level_name){
     fclose(file1);
 }
 
+void SeeBestScore(char high_scores[5][MAX_SIZE_LINE_SCORE_FILE],char *level_name){
+	char *partial_path = concatString("../assets/scores/", level_name);
+    char *full_path = concatString(partial_path, ".txt");
+    FILE *file = fopen(full_path, "r");
+    if (!file) {
+    	printf("Error couldnt find file");
+    	free(full_path);
+    	return;
+	}
+	free(partial_path);
+	char **values;int nb_values,i=0;
+	while (readLine(file,&values,&nb_values) && i<=5){
+		char *score_line = concatString(values[0],values[1]);
+		strcpy(high_scores[i],score_line);
+		free(score_line);
+		i++;
+		for (int i = nb_values; i > 0; i--) free(values[i-1]);
+        free(values);
+	}
+}
 /* Create a new game */
 Game *createNewGame(char *level_name) {
     /* Initialize the new game object */
@@ -2104,6 +2096,10 @@ void updateGame(Game *game, const char *nickname,int score,bool *score_saved) {
             }
             break;
         case VICTORY_PHASE:
+        	if (!*score_saved) {
+        		*score_saved = true;
+        		SaveScore(nickname,score,game->level_name);
+        	}
             break;
         case DEFEAT_PHASE:
         	//verify if the score as already been saved
@@ -2111,12 +2107,12 @@ void updateGame(Game *game, const char *nickname,int score,bool *score_saved) {
         		*score_saved = true;
         		SaveScore(nickname,score,game->level_name);
         	}
-        	
+        	break;
+        case SCORE_PHASE:
             break;
         default:
             break;
     }
-
     /* On wave defeated */
     if (!game->enemy_list && game->game_phase != PRE_WAVE_PHASE) {
         /* If currently on survival mode */
@@ -2194,11 +2190,6 @@ void beguinNewSurvivalWave(Game *game) {
         else if (roll(1.0 - 10000.0/(10000.0 + wave_power))) {
             enemy_type = ORC_ENEMY;
             wave_power -= 300;
-        }
-        /* Add a witch enemy */
-        else if (roll(1.0 - 5000.0/(5000.0 + wave_power))) {
-            enemy_type = WITCH_ENEMY;
-            wave_power -= 200;
         }
         /* Add a goblin enemy */
         else if (roll(1.0 - 2500.0/(2500.0 + wave_power))) {
@@ -2658,21 +2649,36 @@ int main(int argc, char* argv[]) {
 
     /* Set focus to window */
     SDL_RaiseWindow(wind);
-
+	
+	/* get high scores for the level */
+	char high_scores[5][MAX_SIZE_LINE_SCORE_FILE];
+    SeeBestScore(high_scores,game->level_name);
+    
     /* Load images */
     TextElement *win_text_surface = addTextElement(NULL, "VICTORY!", 4.0, (SDL_Color) {255, 255, 255, 255}, (SDL_Color) {0, 0, 0, 255}, (SDL_Rect) {0, 0, WINDOW_WIDTH, WINDOW_HEIGHT}, true, false, NULL);
     TextElement *lose_text_surface = addTextElement(NULL, "DEFEAT...", 4.0, (SDL_Color) {127, 0, 0, 255}, (SDL_Color) {0, 0, 0, 255}, (SDL_Rect) {0, 0, WINDOW_WIDTH, WINDOW_HEIGHT}, true, false, NULL);
-    TextElement *loser_text_surface = addTextElement(NULL, "Press ESC to quit. Your score will be saved :D", 1.0, (SDL_Color) {127, 0, 0, 255}, (SDL_Color) {0, 0, 0, 255}, (SDL_Rect) {WINDOW_WIDTH/3, WINDOW_HEIGHT-400, 500, 300}, true, false, NULL);
-    TextElement *protect_castle_surface = addTextElement(NULL, "PROTECT THE CASTLE ! BUILD YOUR DEFENSES !!", 1.0, (SDL_Color) {255, 255, 255, 255}, (SDL_Color) {155, 155, 155, 255}, (SDL_Rect) {WINDOW_WIDTH/3, 600, WINDOW_WIDTH/2, WINDOW_HEIGHT-600}, true, false, NULL);
-    TextElement *wave_coming_surface = addTextElement(NULL, "ENNEMIES ARE COMING ! GET COVER !", 1.0, (SDL_Color) {255, 255, 255, 255}, (SDL_Color) {155, 155, 155, 255}, (SDL_Rect) {50, 600, WINDOW_WIDTH/2, WINDOW_HEIGHT-600}, true, false, NULL);
     
+    TextElement *protect_castle_surface = addTextElement(NULL, "PROTECT THE CASTLE ! BUILD YOUR DEFENSES !!", 1.0, (SDL_Color) {255, 255, 255, 255}, (SDL_Color) {0, 0, 0, 255}, (SDL_Rect) {WINDOW_WIDTH/3, 600, WINDOW_WIDTH/2, WINDOW_HEIGHT-600}, true, false, NULL);
+    TextElement *wave_coming_surface = addTextElement(NULL, "ENNEMIES ARE COMING ! GET COVER !", 1.0, (SDL_Color) {255, 255, 255, 255}, (SDL_Color) {0, 0, 0, 255}, (SDL_Rect) {50, 600, WINDOW_WIDTH/2, WINDOW_HEIGHT-600}, true, false, NULL);
+    
+    TextElement *loser_text_surface = addTextElement(NULL, "Press ESC to quit. Your score will be saved :D", 1.0, (SDL_Color) {127, 0, 0, 255}, (SDL_Color) {0, 0, 0, 255}, (SDL_Rect) {200, WINDOW_HEIGHT-400, 1000, 400}, true, false, NULL);
+    TextElement *winner_text_surface = addTextElement(NULL, "You can play again to try to beat the highests scores for that level !", 1.0, (SDL_Color) {255, 255, 255, 255}, (SDL_Color) {0, 0, 0, 255}, (SDL_Rect) {100, WINDOW_HEIGHT-400, 1100, 400}, true, false, NULL);
+    
+    
+    TextElement *High_score_header = addTextElement(NULL, "HIGHEST SCORES", 3.0, (SDL_Color) {255, 255, 255, 255}, (SDL_Color) {0, 0, 0, 255}, (SDL_Rect) {200,10, 1100, 400}, true, false, NULL);
+			TextElement *score1 = addTextElement(NULL, high_scores[0], 1.0, (SDL_Color) {255, 255, 255, 255}, (SDL_Color) {0, 0, 0, 255}, (SDL_Rect) {100, 50, 600, 400}, true, false, NULL);
+			TextElement *score2 = addTextElement(NULL, high_scores[1], 1.0, (SDL_Color) {255, 255, 255, 255}, (SDL_Color) {0, 0, 0, 255}, (SDL_Rect) {100, 150, 600, 400}, true, false, NULL);
+			TextElement *score3 = addTextElement(NULL, high_scores[2], 1.0, (SDL_Color) {255, 255, 255, 255}, (SDL_Color) {0, 0, 0, 255}, (SDL_Rect) {100, 250, 600, 400}, true, false, NULL);
+			TextElement *score4 = addTextElement(NULL, high_scores[3], 1.0, (SDL_Color) {255, 255, 255, 255}, (SDL_Color) {0, 0, 0, 255}, (SDL_Rect) {100, 350, 600, 400}, true, false, NULL);
+			TextElement *score5 = addTextElement(NULL, high_scores[4], 1.0, (SDL_Color) {255, 255, 255, 255}, (SDL_Color) {0, 0, 0, 255}, (SDL_Rect) {100, 450, 600, 400}, true, false, NULL);
+			
     SDL_Surface *towers[] = {loadImg("towers/Archer_tower"), loadImg("towers/Empty_tower"), loadImg("towers/canon"), loadImg("towers/sorcerer")};
     SDL_Surface *towers_upgrades[] = {loadImg("towers/sorcerer_evolved"), loadImg("towers/canon_evolved"), loadImg("towers/barracks")};
     SDL_Surface *grass_tiles[] = {loadImg("others/grass_tile_a"), loadImg("others/grass_tile_b"), loadImg("others/grass_tile_c"), loadImg("others/grass_tile_d"), loadImg("others/grass_tile_alt_a"), loadImg("others/grass_tile_alt_b"), loadImg("others/grass_tile_alt_c"), loadImg("others/grass_tile_alt_d")};
     SDL_Surface *highlighted_tile = loadImg("others/tile_choosed"); SDL_Surface *delete_tower = loadImg("others/delete"); SDL_Surface *quit_menu = loadImg("others/quit");
     SDL_Surface *background = loadImg("others/grass_background");
     SDL_Surface *castle = loadImg("others/Castle");
-
+	
     /* Load UI text */
     TextElement *ui_text_element = NULL;
     /* (1 : top left) Funds */
@@ -2694,6 +2700,7 @@ int main(int argc, char* argv[]) {
     bool score_saved = false;
     SDL_Event event;
     bool running = true;
+    
     while (running) {
         while (SDL_PollEvent(&event)) {
             switch (event.type) {
@@ -2732,16 +2739,21 @@ int main(int argc, char* argv[]) {
                             break;
                         case SDL_SCANCODE_D:
                             cam_x_speed = +1;
-                            break;
+                        	break;
                         case SDL_SCANCODE_LSHIFT:
                             cam_speed_mult = +1;
                             break;
                         case SDL_SCANCODE_LCTRL:
                             cam_speed_mult = -1;
                             break;
+                            
                         /* Start the wave */
                         case SDL_SCANCODE_SPACE:
-                            if (game->game_phase == PRE_WAVE_PHASE || game->game_phase == WAITING_FOR_USER_PHASE) startNextWave(game);
+                            if (game->game_phase == PRE_WAVE_PHASE || game->game_phase == WAITING_FOR_USER_PHASE){
+                            	startNextWave(game);
+                            }
+                            if (game->game_phase == VICTORY_PHASE || game->game_phase == DEFEAT_PHASE) game->game_phase = SCORE_PHASE;
+                            
                             break;
                         default:
                             break;
@@ -2968,24 +2980,49 @@ int main(int argc, char* argv[]) {
         ui_text_element->rect.y = ui_text_element->next->rect.y = ui_text_element->next->next->rect.y = !menu_hidden * BASE_WINDOW_HEIGHT/4;
         drawTextElements(rend, &ui_text_element);
         /* Draw victory/defeat text */
-        if (game->game_phase == VICTORY_PHASE) drawTextElements(rend, &win_text_surface);
+        if (game->game_phase == VICTORY_PHASE) {
+        	drawTextElements(rend, &win_text_surface);
+        	drawTextElements(rend,&winner_text_surface);
+        }
         else if (game->game_phase == DEFEAT_PHASE) {
         	drawTextElements(rend, &lose_text_surface);
         	drawTextElements(rend,&loser_text_surface);
         }
-		else if (game->game_phase == PRE_WAVE_PHASE) drawTextElements(rend,&protect_castle_surface);
-		else {
-		drawTextElements(rend,&wave_coming_surface);
+        /* Draw instructions */
+		else if (game->game_phase == PRE_WAVE_PHASE) {
+			drawTextElements(rend,&protect_castle_surface);
+			//drawTextElements(rend,&winner_text_surface);
+			//drawTextElements(rend,&loser_text_surface);
 		}
-	
+		/* draw the high score when game ended */
+		else if (game->game_phase == SCORE_PHASE){
+			drawFilledRect(rend, 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT, 128, 128, 128, 255);
+			drawTextElements(rend,&High_score_header);
+			drawTextElements(rend,&score1);
+			drawTextElements(rend,&score2);
+			drawTextElements(rend,&score3);
+			drawTextElements(rend,&score4);
+			drawTextElements(rend,&score5);
+		}
+		/* draw instructions when wave is coming */
+		else {
+			drawTextElements(rend,&wave_coming_surface);
+		}
         /* Draw to window and loop */
         SDL_RenderPresent(rend);
         SDL_Delay(max(1000/FPS - (SDL_GetTicks64()-CURRENT_TICK), 0));
         CURRENT_TICK = SDL_GetTicks64();
     }
-
     /* Free allocated memory */
-    destroyTextElement(win_text_surface, NULL); destroyTextElement(lose_text_surface, NULL);destroyTextElement(protect_castle_surface,NULL);
+    if (game->game_phase == SCORE_PHASE) {
+    	destroyTextElement(High_score_header,NULL);
+    	destroyTextElement(score1,NULL);
+    	destroyTextElement(score2,NULL);
+    	destroyTextElement(score3,NULL);
+    	destroyTextElement(score4,NULL);
+    	destroyTextElement(score5,NULL);
+    }
+    destroyTextElement(win_text_surface, NULL); destroyTextElement(lose_text_surface, NULL);destroyTextElement(protect_castle_surface,NULL);destroyTextElement(winner_text_surface,NULL);destroyTextElement(loser_text_surface,NULL);destroyTextElement(wave_coming_surface,NULL);
     delImg(delete_tower); delImg(quit_menu); delImg(background); delImg(castle);
     for (int i = 4; i > 0; i--) delImg(towers[i-1]);
     for (int i = 8; i > 0; i--) delImg(grass_tiles[i-1]);
