@@ -251,10 +251,9 @@ typedef struct {
     char *level_name;                // Name of the played level
 } Game;
 
-typedef struct scoreboard{
-	char *Nickname; 				// Nickname of the player
-	int score;						// Score of the player
-
+typedef struct {
+    char *nickname;  // Nickname of the player
+    int score;       // Score of the player
 } Scoreboard;
 
 
@@ -318,7 +317,7 @@ Game *createNewGame(char *level_name);
 Game *loadGameFromSave(char *save_file);
 bool loadNextWave(Game *game);
 void startNextWave(Game *game);
-void updateGame(Game *game, const char *nickname,int score,bool *score_saved);
+void updateGame(Game *game, const char *nickname);
 void beguinNewSurvivalWave(Game *game);
 Wave *newWave(int income, Enemy *enemy_list);
 void destroyWaveList(Wave **wave_list, int nb_wave);
@@ -340,7 +339,7 @@ void drawImgDynamic(SDL_Renderer *rend, SDL_Surface *img, int pos_x, int pos_y, 
 void drawRect(SDL_Renderer *rend, int pos_x, int pos_y, int width, int height, int red, int green, int blue, int alpha);
 void drawFilledRect(SDL_Renderer *rend, int pos_x, int pos_y, int width, int height, int red, int green, int blue, int alpha);
 Tower *upgradeTower(Tower **tower_list, Enemy *enemy_list, char tower_type, int placement_collumn, int placement_row, int *funds);
-void SaveScore(const char *actualnickname,int actualscore,char *level_name);
+void saveScore(const char *current_nickname,int current_score,char *level_name);
 
 
 
@@ -1885,58 +1884,48 @@ void drawProjectiles(SDL_Renderer *rend, Projectile *projectile_list) {
 }
 
 
-void SaveScore(const char *actualnickname,int actualscore,char *level_name){
-	char *partial_path = concatString("../assets/scores/", level_name);
+void saveScore(const char *current_nickname, int current_score, char *level_name) {
+    char *partial_path = concatString("../assets/scores/", level_name);
     char *full_path = concatString(partial_path, ".txt");
     FILE *file = fopen(full_path, "r");
-	free(partial_path);
-    char **values;int nb_values, i=0;
-    Scoreboard Game_scoreboard[MAX_SIZE_SCORE_FILE]; Scoreboard temp;
+    free(partial_path);
+    /* Reading scoreboard file (if there is one) */
+    char **values; int nb_values, nb_score_entry = 0;
+    Scoreboard game_scoreboard[MAX_SIZE_SCORE_FILE]; Scoreboard temp;
     if (file) {
-		while (readLine(file,&values,&nb_values)){
-				Game_scoreboard[i].Nickname=duplicateString(values[0]);
-				Game_scoreboard[i].score=stringToInt(values[1]);
-				i++;
-		        /* Free memory */
-		        for (int j = nb_values; j > 0; j--) free(values[j-1]);
-		        free(values);
-		}
-		fclose(file);
-	}
-	else {
-		printf("No file found, creating new score file for %s \n",level_name);
-	}
-	// we add the new player at the end of the scoreboard struct before sorting the array
-    Game_scoreboard[i].Nickname = duplicateString(actualnickname);
-    Game_scoreboard[i].score = actualscore; 
-    i++;
-    //We sort the array using the selection sort
-    for (int x =0;x<i;x++){
-    	temp=Game_scoreboard[x];
-    	int y = x-1;
-    	while ( y>=0 && temp.score < Game_scoreboard[y].score){
-    		Game_scoreboard[y+1] = Game_scoreboard[y];
-    		y--;
-    	}
-    	Game_scoreboard[y+1] = temp;
+        while (readLine(file, &values, &nb_values)) {
+            game_scoreboard[nb_score_entry].nickname = duplicateString(values[0]);
+            game_scoreboard[nb_score_entry].score = stringToInt(values[1]);
+            nb_score_entry++;
+            /* Free memory */
+            for (int j = nb_values; j > 0; j--) free(values[j-1]);
+            free(values);
+        }
+        fclose(file);
     }
-    
-    FILE *file1 = fopen(full_path, "w");
-    if (!file1) {
-    	printf("Error opening scoreboard file");
-    	free(full_path);
-    	fclose(file1);
-    	for (int j=0; j<i-1;j++){
-    		free(Game_scoreboard[j].Nickname);
-    	}
-    	return;
-	}	
-    for (int j=i-1; j>=0;j--){
-    	fprintf(file1,"%s %d \n", Game_scoreboard[j].Nickname,Game_scoreboard[j].score);
-    	free(Game_scoreboard[j].Nickname);
+    /* Add the new player at the end of the scoreboard struct before sorting the array */
+    game_scoreboard[nb_score_entry].nickname = duplicateString(current_nickname);
+    game_scoreboard[nb_score_entry].score = current_score;
+    nb_score_entry++;
+    /* Sort the array using the selection sort */
+    for (int x = 0; x < nb_score_entry; x++) {
+        temp = game_scoreboard[x];
+        int y = x-1;
+        while (y >= 0 && temp.score > game_scoreboard[y].score){
+            game_scoreboard[y+1] = game_scoreboard[y];
+            y--;
+        }
+        game_scoreboard[y+1] = temp;
+    }
+    /* Re-write first 5 scores in scoreboard file */
+    file = fopen(full_path, "w");
+    if (!file) printf("[ERROR]    Cannot open scoreboard file at \"%s\"\n", full_path);
+    else {
+        for (int j = 0; j < min(nb_score_entry, 5); j++) fprintf(file,"%s %d\n", game_scoreboard[j].nickname, game_scoreboard[j].score);
+        for (int j = nb_score_entry; j > 0; j--) free(game_scoreboard[j-1].nickname);
+        fclose(file);
     }
     free(full_path);
-    fclose(file1);
 }
 
 /* Create a new game */
@@ -2046,14 +2035,14 @@ void startNextWave(Game *game) {
 }
 
 /* Update game */
-void updateGame(Game *game, const char *nickname,int score,bool *score_saved) {
+void updateGame(Game *game, const char *nickname) {
     bool condition; Enemy *enemy; Tower *tower;
     /* Update game phase */
     switch (game->game_phase) {
         case WAITING_FOR_USER_PHASE:
             break;
         case PRE_WAVE_PHASE:
-        	
+            
             saveGame(nickname, game);
             break;
         case ENEMIES_MOVING_PHASE:
@@ -2106,12 +2095,6 @@ void updateGame(Game *game, const char *nickname,int score,bool *score_saved) {
         case VICTORY_PHASE:
             break;
         case DEFEAT_PHASE:
-        	//verify if the score as already been saved
-        	if (!*score_saved) {
-        		*score_saved = true;
-        		SaveScore(nickname,score,game->level_name);
-        	}
-        	
             break;
         default:
             break;
@@ -2124,8 +2107,10 @@ void updateGame(Game *game, const char *nickname,int score,bool *score_saved) {
         /* If defeated a wave */
         else if (game->current_wave_nb < game->nb_waves) loadNextWave(game);
         /* If defeated last wave (victory) */
-        else {
+        else if (game->game_phase != VICTORY_PHASE) {
             game->game_phase = VICTORY_PHASE;
+            /* Save score */
+            saveScore(nickname, game->score, game->level_name);
             /* Delete save file */
             deleteSaveFile(nickname);
         }
@@ -2136,9 +2121,10 @@ void updateGame(Game *game, const char *nickname,int score,bool *score_saved) {
     while (enemy) {
         if (enemy->collumn <= 0) {
             game->game_phase = DEFEAT_PHASE;
+            /* Save score */
+            saveScore(nickname, game->score, game->level_name);
             /* Delete save file */
             deleteSaveFile(nickname);
-            
             break;
         }
         enemy = enemy->next;
@@ -2662,16 +2648,15 @@ int main(int argc, char* argv[]) {
     /* Load images */
     TextElement *win_text_surface = addTextElement(NULL, "VICTORY!", 4.0, (SDL_Color) {255, 255, 255, 255}, (SDL_Color) {0, 0, 0, 255}, (SDL_Rect) {0, 0, WINDOW_WIDTH, WINDOW_HEIGHT}, true, false, NULL);
     TextElement *lose_text_surface = addTextElement(NULL, "DEFEAT...", 4.0, (SDL_Color) {127, 0, 0, 255}, (SDL_Color) {0, 0, 0, 255}, (SDL_Rect) {0, 0, WINDOW_WIDTH, WINDOW_HEIGHT}, true, false, NULL);
-    TextElement *loser_text_surface = addTextElement(NULL, "Press ESC to quit. Your score will be saved :D", 1.0, (SDL_Color) {127, 0, 0, 255}, (SDL_Color) {0, 0, 0, 255}, (SDL_Rect) {WINDOW_WIDTH/3, WINDOW_HEIGHT-400, 500, 300}, true, false, NULL);
-    TextElement *protect_castle_surface = addTextElement(NULL, "PROTECT THE CASTLE ! BUILD YOUR DEFENSES !!", 1.0, (SDL_Color) {255, 255, 255, 255}, (SDL_Color) {155, 155, 155, 255}, (SDL_Rect) {WINDOW_WIDTH/3, 600, WINDOW_WIDTH/2, WINDOW_HEIGHT-600}, true, false, NULL);
-    TextElement *wave_coming_surface = addTextElement(NULL, "ENNEMIES ARE COMING ! GET COVER !", 1.0, (SDL_Color) {255, 255, 255, 255}, (SDL_Color) {155, 155, 155, 255}, (SDL_Rect) {50, 600, WINDOW_WIDTH/2, WINDOW_HEIGHT-600}, true, false, NULL);
-    
+    TextElement *protect_castle_surface = addTextElement(NULL, "Protect the castle, build defences!", 1.0, (SDL_Color) {255, 255, 255, 255}, (SDL_Color) {0, 0, 0, 255}, (SDL_Rect) {0, BASE_WINDOW_HEIGHT - FONT_HEIGHT, WINDOW_WIDTH, FONT_HEIGHT}, true, false, NULL);
+    TextElement *wave_coming_surface = addTextElement(NULL, "Enemies are approching, to arms!", 1.0, (SDL_Color) {255, 255, 255, 255}, (SDL_Color) {0, 0, 0, 255}, (SDL_Rect) {0, BASE_WINDOW_HEIGHT - FONT_HEIGHT, WINDOW_WIDTH, FONT_HEIGHT}, true, false, NULL);
     SDL_Surface *towers[] = {loadImg("towers/Archer_tower"), loadImg("towers/Empty_tower"), loadImg("towers/canon"), loadImg("towers/sorcerer")};
     SDL_Surface *towers_upgrades[] = {loadImg("towers/sorcerer_evolved"), loadImg("towers/canon_evolved"), loadImg("towers/barracks")};
     SDL_Surface *grass_tiles[] = {loadImg("others/grass_tile_a"), loadImg("others/grass_tile_b"), loadImg("others/grass_tile_c"), loadImg("others/grass_tile_d"), loadImg("others/grass_tile_alt_a"), loadImg("others/grass_tile_alt_b"), loadImg("others/grass_tile_alt_c"), loadImg("others/grass_tile_alt_d")};
     SDL_Surface *highlighted_tile = loadImg("others/tile_choosed"); SDL_Surface *delete_tower = loadImg("others/delete"); SDL_Surface *quit_menu = loadImg("others/quit");
     SDL_Surface *background = loadImg("others/grass_background");
     SDL_Surface *castle = loadImg("others/Castle");
+    TextElement *scoreboard = NULL;
 
     /* Load UI text */
     TextElement *ui_text_element = NULL;
@@ -2872,7 +2857,7 @@ int main(int argc, char* argv[]) {
         }
 
         /* Update game */
-        updateGame(game, nickname,score,&score_saved);
+        updateGame(game, nickname);
 
         /* Automaticaly close building menu durring waves (canot build in the middle of a wave) */
         if (game->game_phase != PRE_WAVE_PHASE) menu_hidden = true;
@@ -2969,15 +2954,38 @@ int main(int argc, char* argv[]) {
         drawTextElements(rend, &ui_text_element);
         /* Draw victory/defeat text */
         if (game->game_phase == VICTORY_PHASE) drawTextElements(rend, &win_text_surface);
-        else if (game->game_phase == DEFEAT_PHASE) {
-        	drawTextElements(rend, &lose_text_surface);
-        	drawTextElements(rend,&loser_text_surface);
+        else if (game->game_phase == DEFEAT_PHASE) drawTextElements(rend, &lose_text_surface);
+        else if (game->game_phase == PRE_WAVE_PHASE) drawTextElements(rend,&protect_castle_surface);
+        else drawTextElements(rend, &wave_coming_surface);
+
+        /* Draw scoreboard on victory/defeat */
+        if (game->game_phase == VICTORY_PHASE || game->game_phase == DEFEAT_PHASE) {
+            /* Load scoreboard */
+            if (!scoreboard) {
+                char *partial_path = concatString("../assets/scores/", game->level_name);
+                char *full_path = concatString(partial_path, ".txt");
+                FILE *file = fopen(full_path, "r");
+                free(partial_path);
+                char *text_value = malloc(1028 * sizeof(char)), *tmp = malloc(1028 * sizeof(char)), buffer[128];
+                text_value[0] = '\0';
+                /* Reading scoreboard file (if there is one) */
+                char **values; int nb_values;
+                if (file) {
+                    while (readLine(file, &values, &nb_values)) {
+                        sprintf(buffer, "%10s : %06d points    \n", values[0], stringToInt(values[1]));
+                        tmp = text_value;
+                        text_value = concatString(text_value, buffer);
+                        free(tmp);
+                        /* Free memory */
+                    }
+                    fclose(file);
+                }
+                scoreboard = addTextElement(NULL, text_value, 0.5, (SDL_Color) {255, 255, 255, 255}, (SDL_Color) {0, 0, 0, 255}, (SDL_Rect) {0, BASE_WINDOW_HEIGHT*2/3, BASE_WINDOW_WIDTH, BASE_WINDOW_HEIGHT/3}, true, false, NULL);
+            }
+            /* Display scoreboard */
+            drawTextElements(rend, &scoreboard);
         }
-		else if (game->game_phase == PRE_WAVE_PHASE) drawTextElements(rend,&protect_castle_surface);
-		else {
-		drawTextElements(rend,&wave_coming_surface);
-		}
-	
+
         /* Draw to window and loop */
         SDL_RenderPresent(rend);
         SDL_Delay(max(1000/FPS - (SDL_GetTicks64()-CURRENT_TICK), 0));
