@@ -2592,7 +2592,7 @@ int main(int argc, char* argv[]) {
                                 pixelToTile(&selected_tile_pos[0], &selected_tile_pos[1]);
                                 /* Check if tile is on map (last collumn cannot be build on) */
                                 if (1 <= selected_tile_pos[0] && selected_tile_pos[0] <= NB_COLLUMNS-1 && 1 <= selected_tile_pos[1] && selected_tile_pos[1] <= NB_ROWS) {
-                                    menu_hidden = false;
+                                    menu_hidden = (game->game_phase != PRE_WAVE_PHASE);
                                 }
                                 else {
                                     selected_tile_pos[0] = 0; selected_tile_pos[1] = 0;
@@ -2613,7 +2613,7 @@ int main(int argc, char* argv[]) {
                                 else if (0 <= event.button.x && event.button.x <= WINDOW_HEIGHT/4 && 0 <= event.button.y && event.button.y <= WINDOW_HEIGHT/4){
                                     /* Clicked on the turret upgrade */
                                     upgradeTower(&game->tower_list, game->enemy_list, towerOnTile->type, selected_tile_pos[0], selected_tile_pos[1], &game->funds);
-                                    menu_hidden=true;
+                                    menu_hidden = true;
                                 }
                             }
                             /* Tile with no tower selected */
@@ -2676,6 +2676,9 @@ int main(int argc, char* argv[]) {
 
         /* Update game */
         updateGame(game, nickname);
+
+        /* Automaticaly close building menu durring waves (canot build in the middle of a wave) */
+        if (game->game_phase != PRE_WAVE_PHASE) menu_hidden = true;
 
         /* Update UI if needed */
         /* Update score display */
