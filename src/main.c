@@ -2484,6 +2484,7 @@ int main(int argc, char* argv[]) {
         /* Remove line break */
         if ((c = strchr(buffer, '\r'))) *c = '\0';
         if ((c = strchr(buffer, '\n'))) *c = '\0';
+        int num_id = stringToInt(buffer);
         /* Exit program */
         if (!strcmp(buffer, "quit") || !strcmp(buffer, "exit") || !strcmp(buffer, "")) return 0;
         /* Load a level by entering its name */
@@ -2492,18 +2493,19 @@ int main(int argc, char* argv[]) {
             break;
         }
         /* Load a level by entering its numerical ID */
-        if (!game) if (0 < stringToInt(buffer) && stringToInt(buffer) <= nb_availible_levels)
-            game = createNewGame(availible_levels[stringToInt(buffer)]);
+        if (!game) if (0 < num_id && num_id <= nb_availible_levels)
+            game = createNewGame(availible_levels[num_id-1]);
         /* Load survival mode */
-        if (!game) if (!strcmp(buffer, "Survival mode") || stringToInt(buffer) == nb_availible_levels+1)
+        if (!game) if (!strcmp(buffer, "Survival mode") || num_id == nb_availible_levels+1)
             game = createNewGame(SURVIVAL_MODE);
         /* Load savefile */
-        if (!game) if (save_availible && (!strcmp(buffer, "Load save") || stringToInt(buffer) == nb_availible_levels+2))
+        if (!game) if (save_availible && (!strcmp(buffer, "Load save") || num_id == nb_availible_levels+2))
             game = loadGameFromSave(nickname);
         /* Error */
         if (!game) printf("Could not find level \"%s\", please try again\n", buffer);
     }
     printf("Level loaded successfully, have fun!\n");
+    for (int i = nb_availible_levels; i > 0; i--) free(availible_levels[i-1]);
 
 
     /* Graphic part */
