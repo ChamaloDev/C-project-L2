@@ -5,6 +5,10 @@
 #include <time.h>
 #include <SDL.h>
 #include <dirent.h>
+
+
+
+
 #define FULLSCREEN false        // Set if the game should start on fullscreen (F11 to toggle on/off)
 #define ANTI_ALIASING "2"       // Set if the game should use anti aliasing for rendering
 #define FPS 60                  // Game target FPS
@@ -20,10 +24,12 @@
 #define BASE_WINDOW_WIDTH 1280  // Default width of the window
 #define BASE_WINDOW_HEIGHT 720  // Default width of the window
 
-#define MAX_LENGTH_TOWER_NAME 32
 #define MAX_LENGTH_NICKNAME 32
 #define MAX_SIZE_SCORE_FILE 100
-#define MAX_SIZE_LINE_SCORE_FILE 46
+
+
+
+
 /* Enemy types */
 #define SLIME_ENEMY 'S'
 #define GELLY_ENEMY 'G'
@@ -985,7 +991,7 @@ TextElement *updateLifeBarTextElement(TextElement **text_element, int current_li
     SDL_Color main_color = {(int) 255.0 * (1 - power(life_ratio, 2)), (int) 255.0 * (1.0 - power(1 - life_ratio, 2)), 0, 255};
     SDL_Color outline_color = {main_color.r/2, main_color.g/2, 0, 255};
     /* Create new text element representing the life bar */
-    *text_element = addTextElement(NULL, text_value, 1.0, main_color, outline_color, (SDL_Rect) {0, 0, SPRITE_SIZE, 48}, true, true, NULL);
+    *text_element = addTextElement(NULL, text_value, 1.0, main_color, outline_color, (SDL_Rect) {0, 0, SPRITE_SIZE, FONT_HEIGHT}, true, true, NULL);
     return *text_element;
 }
 
@@ -2669,11 +2675,11 @@ int main(int argc, char* argv[]) {
     /* Load UI text */
     TextElement *ui_text_element = NULL;
     /* (1 : top left) Funds */
-    addTextElement(&ui_text_element, "", 0.5, (SDL_Color) {0, 0, 0, 0}, (SDL_Color) {0, 0, 0, 0}, (SDL_Rect) {0, 0, WINDOW_WIDTH/3, 48}, true, false, NULL);
+    addTextElement(&ui_text_element, "", 0.5, (SDL_Color) {0, 0, 0, 0}, (SDL_Color) {0, 0, 0, 0}, (SDL_Rect) {0, 0, WINDOW_WIDTH/3, FONT_HEIGHT}, true, false, NULL);
     /* (2 : top middle) Wave number */
-    addTextElement(&ui_text_element, "", 0.5, (SDL_Color) {0, 0, 0, 0}, (SDL_Color) {0, 0, 0, 0}, (SDL_Rect) {WINDOW_WIDTH/3, 0, WINDOW_WIDTH/3, 48}, true, false, NULL);
+    addTextElement(&ui_text_element, "", 0.5, (SDL_Color) {0, 0, 0, 0}, (SDL_Color) {0, 0, 0, 0}, (SDL_Rect) {WINDOW_WIDTH/3, 0, WINDOW_WIDTH/3, FONT_HEIGHT}, true, false, NULL);
     /* (3 : top right) Score */
-    addTextElement(&ui_text_element, "", 0.5, (SDL_Color) {0, 0, 0, 0}, (SDL_Color) {0, 0, 0, 0}, (SDL_Rect) {WINDOW_WIDTH*2/3, 0, WINDOW_WIDTH/3, 48}, true, false, NULL);
+    addTextElement(&ui_text_element, "", 0.5, (SDL_Color) {0, 0, 0, 0}, (SDL_Color) {0, 0, 0, 0}, (SDL_Rect) {WINDOW_WIDTH*2/3, 0, WINDOW_WIDTH/3, FONT_HEIGHT}, true, false, NULL);
 
     /* Main loop */
     Tower *towerOnTile;

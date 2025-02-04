@@ -44,3 +44,4 @@ dkms.conf
 
 # Game save files
 assets/saves/*.txt
+assets/scores/*.txt
