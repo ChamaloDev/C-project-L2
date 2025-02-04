@@ -2470,6 +2470,7 @@ int main(int argc, char* argv[]) {
     SDL_Surface *towers_upgrades[] = {loadImg("towers/sorcerer_evolved"), loadImg("towers/canon_evolved"), loadImg("towers/barracks")};
     SDL_Surface *grass_tiles[] = {loadImg("others/grass_tile_a"), loadImg("others/grass_tile_b"), loadImg("others/grass_tile_c"), loadImg("others/grass_tile_d"), loadImg("others/grass_tile_alt_a"), loadImg("others/grass_tile_alt_b"), loadImg("others/grass_tile_alt_c"), loadImg("others/grass_tile_alt_d")};
     SDL_Surface *highlighted_tile = loadImg("others/tile_choosed"); SDL_Surface *delete_tower = loadImg("others/delete"); SDL_Surface *quit_menu = loadImg("others/quit");
+    SDL_Surface *background = loadImg("others/grass_background");
 
     /* Load UI text */
     TextElement *ui_text_element = NULL;
@@ -2713,7 +2714,7 @@ int main(int argc, char* argv[]) {
         CAM_POS_Y += BASE_CAM_SPEED * cam_y_speed * power(CAM_SPEED_MULT, cam_speed_mult) * power(1.4142/2, cam_x_speed && cam_y_speed) / CAM_SCALE;
 
         /* Draw elements */
-        // drawImgStatic(rend,background,0,0,WINDOW_WIDTH,WINDOW_HEIGHT,NULL);
+        drawImgStatic(rend, background, 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT, NULL);
         /* Draw grass tiles */
         for (int y = 0; y < NB_ROWS; y++) for (int x = 0; x < NB_COLLUMNS; x++) 
             drawImgDynamic(rend, grass_tiles[x%2 + (y%2) * 2], TILE_WIDTH * x, TILE_HEIGHT * y, SPRITE_SIZE, SPRITE_SIZE, NULL);
