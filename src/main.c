@@ -2701,9 +2701,10 @@ int main(int argc, char* argv[]) {
     bool menu_hidden = true;
     bool mouse_dragging = false;
     bool fullscreen = FULLSCREEN;
+    float game_speed = 1.0;
+    int last_tick = SDL_GetTicks();
     SDL_Event event;
     bool running = true;
-    
     while (running) {
         while (SDL_PollEvent(&event)) {
             switch (event.type) {
@@ -2749,7 +2750,12 @@ int main(int argc, char* argv[]) {
                         case SDL_SCANCODE_LCTRL:
                             cam_speed_mult = -1;
                             break;
-                            
+                        case SDL_SCANCODE_O:
+                            game_speed *= 0.5;
+                            break;
+                        case SDL_SCANCODE_P:
+                            game_speed *= 2.0;
+                            break;
                         /* Start the wave */
                         case SDL_SCANCODE_SPACE:
                             if (game->game_phase == PRE_WAVE_PHASE || game->game_phase == WAITING_FOR_USER_PHASE){
@@ -3024,8 +3030,10 @@ int main(int argc, char* argv[]) {
 
         /* Draw to window and loop */
         SDL_RenderPresent(rend);
-        SDL_Delay(max(1000/FPS - (SDL_GetTicks64()-CURRENT_TICK), 0));
-        CURRENT_TICK = SDL_GetTicks64();
+        int tick_since_last_frame = SDL_GetTicks64() - last_tick;
+        SDL_Delay(max(1000/FPS - tick_since_last_frame, 0));
+        last_tick = SDL_GetTicks64();
+        CURRENT_TICK += tick_since_last_frame*game_speed;
     }
 
     /* Free memory */
